@@ -60,9 +60,8 @@ client.on('interactionCreate', async interaction => {
             const panelDesc = options.getString('panel-desc') ?? 'チケット発行ありがとうございます。メンションされているロールの担当者が来るまでしばらくお待ちください。';
             
             const embed = new EmbedBuilder().setTitle(title).setDescription(description);
-            // 複数の情報をボタンIDに詰め込む（注意: 100文字制限があるため簡易的に）
+            // panelDescをカスタムIDに埋め込むのは長すぎるため、ここでは固定IDにし、パネル生成時にデフォルトテキストを使う形式にしています
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ticket_${adminRole.id}`).setLabel('チケットを発行').setStyle(ButtonStyle.Primary));
-            // サーバー内でメッセージを受け渡すために、カスタムIDに panelDesc を埋め込むのは難しいため、チケット作成処理でデフォルトを使うか工夫が必要です
             await interaction.reply({ embeds: [embed], components: [row] });
         }
 
@@ -75,16 +74,16 @@ client.on('interactionCreate', async interaction => {
 
     // [ボタン処理]
     if (interaction.isButton()) {
-        // ロール付与
         if (interaction.customId.startsWith('v_role_')) {
             const roleId = interaction.customId.split('_')[2];
             await interaction.member.roles.add(roleId);
             await interaction.reply({ content: `${interaction.user.username} にロールを付与しました！`, ephemeral: true });
         }
 
-        // チケット作成
         if (interaction.customId.startsWith('ticket_')) {
             const adminRoleId = interaction.customId.split('_')[1];
+            const adminRoleMention = `<@&${adminRoleId}>`;
+
             const channel = await interaction.guild.channels.create({
                 name: `🎫｜${interaction.user.username}`,
                 type: ChannelType.GuildText,
@@ -96,11 +95,10 @@ client.on('interactionCreate', async interaction => {
             });
 
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('delete_confirm').setLabel('チケット削除').setStyle(ButtonStyle.Danger));
-            await channel.send({ content: `${interaction.user} 様\nチケット発行ありがとうございます。メンションされているロールの担当者が来るまでしばらくお待ちください。`, components: [row] });
+            await channel.send({ content: `${interaction.user} 様、${adminRoleMention} 様\nチケット発行ありがとうございます。担当者が来るまでしばらくお待ちください。`, components: [row] });
             await interaction.reply({ content: `チケットを作成しました: ${channel}`, ephemeral: true });
         }
 
-        // 削除確認 (二段階)
         if (interaction.customId === 'delete_confirm') {
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('delete_yes').setLabel('本当に削除する').setStyle(ButtonStyle.Danger),
