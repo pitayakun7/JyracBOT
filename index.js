@@ -95,7 +95,7 @@ client.on('interactionCreate', async interaction => {
             });
 
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('delete_confirm').setLabel('チケット削除').setStyle(ButtonStyle.Danger));
-            await channel.send({ content: `${interaction.user} 様、${adminRoleMention} 様\nチケット発行ありがとうございます。担当者が来るまでしばらくお待ちください。`, components: [row] });
+            await channel.send({ content: `${interaction.user} 様\nチケット発行ありがとうございます。担当者が来るまでしばらくお待ちください。\${adminRoleMention} `, components: [row] });
             await interaction.reply({ content: `チケットを作成しました: ${channel}`, ephemeral: true });
         }
 
