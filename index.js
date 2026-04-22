@@ -1,12 +1,11 @@
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField } = require('discord.js');
 const express = require('express');
 
-// --- 1. Botの初期化 ---
 const client = new Client({ 
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] 
 });
 
-// --- 2. スラッシュコマンド定義 ---
+// --- コマンド定義 ---
 const commands = [
     new SlashCommandBuilder().setName('verify').setDescription('認証パネル')
         .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
@@ -18,70 +17,49 @@ const commands = [
         .addStringOption(o => o.setName('description').setDescription('説明文').setRequired(false))
         .addStringOption(o => o.setName('panel-desc').setDescription('チケット発行後のメッセージ').setRequired(false)),
     new SlashCommandBuilder().setName('role-confirmation').setDescription('ロール確認')
-        .addUserOption(o => o.setName('target').setDescription('対象').setRequired(true))
+        .addUserOption(o => o.setName('target').setDescription('対象のメンバー').setRequired(true))
 ].map(c => c.toJSON());
 
-// --- 3. 起動時にコマンドを自動登録 ---
 client.once('clientReady', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    try {
-        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('コマンド登録完了！');
-    } catch (error) {
-        console.error('コマンド登録エラー:', error);
-    }
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log('コマンド登録完了！');
 });
 
-// --- 4. Webサーバー (Render維持用) ---
 const app = express();
 app.get('/', (req, res) => res.send('Bot is active!'));
 app.listen(3000);
 
-// --- 5. メイン処理 ---
 client.on('interactionCreate', async interaction => {
-    // [コマンド処理]
     if (interaction.isChatInputCommand()) {
-        const { commandName, options } = interaction;
-
-        if (commandName === 'verify') {
-            const role = options.getRole('role');
-            const title = options.getString('title') ?? 'ロール付与';
-            const description = options.getString('description') ?? 'ロールの付与を行います。';
-            
-            const embed = new EmbedBuilder().setTitle(title).setDescription(description);
+        if (interaction.commandName === 'verify') {
+            const role = interaction.options.getRole('role');
+            const embed = new EmbedBuilder().setTitle(interaction.options.getString('title') ?? 'ロール付与').setDescription(interaction.options.getString('description') ?? '認証ボタンを押してロールを取得してください。');
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`v_role_${role.id}`).setLabel('✅認証').setStyle(ButtonStyle.Success));
             await interaction.reply({ embeds: [embed], components: [row] });
         }
 
-        if (commandName === 'ticket') {
-            const adminRole = options.getRole('admin-role');
-            const title = options.getString('title') ?? '問い合わせ';
-            const description = options.getString('description') ?? 'チケットを作成し管理者に問い合わせができます。';
-            const panelDesc = options.getString('panel-desc') ?? 'チケット発行ありがとうございます。メンションされているロールの担当者が来るまでしばらくお待ちください。';
+        if (interaction.commandName === 'ticket') {
+            const adminRole = interaction.options.getRole('admin-role');
+            const title = interaction.options.getString('title') ?? '問い合わせ';
+            const description = interaction.options.getString('description') ?? 'ボタンを押してチケットを作成してください。';
+            const panelDesc = Buffer.from(interaction.options.getString('panel-desc') ?? 'チケット発行ありがとうございます。担当者が来るまでしばらくお待ちください。').toString('base64');
             
             const embed = new EmbedBuilder().setTitle(title).setDescription(description);
-            // panelDescをカスタムIDに埋め込むのは長すぎるため、ここでは固定IDにし、パネル生成時にデフォルトテキストを使う形式にしています
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ticket_${adminRole.id}`).setLabel('チケットを発行').setStyle(ButtonStyle.Primary));
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ticket_${adminRole.id}_${panelDesc}`).setLabel('チケットを発行').setStyle(ButtonStyle.Primary));
             await interaction.reply({ embeds: [embed], components: [row] });
-        }
-
-        if (commandName === 'role-confirmation') {
-            const member = options.getMember('target');
-            const roles = member.roles.cache.filter(r => r.name !== '@everyone').map(r => r.name).join('\n') || 'なし';
-            await interaction.reply({ content: `**${member.user.tag}** の付与ロール:\n\`\`\`\n${roles}\n\`\`\``, ephemeral: true });
         }
     }
 
-    // [ボタン処理]
     if (interaction.isButton()) {
         if (interaction.customId.startsWith('v_role_')) {
-            const roleId = interaction.customId.split('_')[2];
-            await interaction.member.roles.add(roleId);
-            await interaction.reply({ content: `${interaction.user.username} にロールを付与しました！`, ephemeral: true });
+            await interaction.member.roles.add(interaction.customId.split('_')[2]);
+            await interaction.reply({ content: 'ロールを付与しました！', ephemeral: true });
         }
 
         if (interaction.customId.startsWith('ticket_')) {
-            const adminRoleId = interaction.customId.split('_')[1];
+            const [_, adminRoleId, encodedDesc] = interaction.customId.split('_');
+            const panelDesc = Buffer.from(encodedDesc, 'base64').toString('utf-8');
             const adminRoleMention = `<@&${adminRoleId}>`;
 
             const channel = await interaction.guild.channels.create({
@@ -95,7 +73,8 @@ client.on('interactionCreate', async interaction => {
             });
 
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('delete_confirm').setLabel('チケット削除').setStyle(ButtonStyle.Danger));
-            await channel.send({ content: `${interaction.user} 様\nチケット発行ありがとうございます。担当者が来るまでしばらくお待ちください。\${adminRoleMention} `, components: [row] });
+            // 構成：メッセージ本文 \n\n 呼び出し用ロール
+            await channel.send({ content: `${interaction.user} 様\n${panelDesc}\n\n${adminRoleMention}`, components: [row] });
             await interaction.reply({ content: `チケットを作成しました: ${channel}`, ephemeral: true });
         }
 
@@ -106,13 +85,8 @@ client.on('interactionCreate', async interaction => {
             );
             await interaction.reply({ content: '本当にこのチケットを削除しますか？', components: [row], ephemeral: true });
         }
-
-        if (interaction.customId === 'delete_yes') {
-            await interaction.channel.delete();
-        }
-        if (interaction.customId === 'delete_no') {
-            await interaction.update({ content: '削除をキャンセルしました。', components: [] });
-        }
+        if (interaction.customId === 'delete_yes') await interaction.channel.delete();
+        if (interaction.customId === 'delete_no') await interaction.update({ content: '削除をキャンセルしました。', components: [] });
     }
 });
 
