@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionsBitField, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const express = require('express');
 
 // --- 1. Botの初期化 ---
@@ -6,7 +6,6 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] 
 });
 
-// チケットメッセージを保存するメモリ（文字数制限対策）
 const ticketMessages = new Map();
 
 // --- 2. スラッシュコマンド定義 ---
@@ -23,7 +22,8 @@ const commands = [
     new SlashCommandBuilder().setName('role-confirmation').setDescription('ロール確認')
         .addUserOption(o => o.setName('target').setDescription('対象のメンバー').setRequired(true)),
     new SlashCommandBuilder().setName('delete').setDescription('メッセージを指定数削除します')
-        .addIntegerOption(o => o.setName('amount').setDescription('削除する数 (1-100)').setRequired(true))
+        .addIntegerOption(o => o.setName('amount').setDescription('削除する数 (1-100)').setRequired(true)),
+    new SlashCommandBuilder().setName('help').setDescription('コマンドの詳細を確認できます')
 ].map(c => c.toJSON());
 
 // --- 3. 起動時処理 ---
@@ -43,9 +43,29 @@ app.listen(3000);
 
 // --- 4. メイン処理 ---
 client.on('interactionCreate', async interaction => {
-    // 二重返信防止
+    // スラッシュコマンド処理
     if (interaction.isChatInputCommand()) {
         const { commandName, options } = interaction;
+
+        if (commandName === 'help') {
+            const embed = new EmbedBuilder()
+                .setTitle('ヘルプパネル')
+                .setDescription('詳細を確認したいコマンドを下のプルダウンから選んでください。')
+                .setColor(0x00AE86);
+
+            const select = new StringSelectMenuBuilder()
+                .setCustomId('help_select')
+                .setPlaceholder('コマンドを選択してください')
+                .addOptions(
+                    new StringSelectMenuOptionBuilder().setLabel('/verify').setDescription('認証パネルの作成').setValue('help_verify'),
+                    new StringSelectMenuOptionBuilder().setLabel('/ticket').setDescription('チケットパネルの作成').setValue('help_ticket'),
+                    new StringSelectMenuOptionBuilder().setLabel('/role-confirmation').setDescription('ロールの確認').setValue('help_role'),
+                    new StringSelectMenuOptionBuilder().setLabel('/delete').setDescription('メッセージの削除').setValue('help_delete')
+                );
+
+            const row = new ActionRowBuilder().addComponents(select);
+            await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+        }
 
         if (commandName === 'verify') {
             const role = options.getRole('role');
@@ -64,12 +84,10 @@ client.on('interactionCreate', async interaction => {
             const description = options.getString('description') ?? 'ボタンを押してチケットを作成してください。';
             const panelDesc = options.getString('panel-desc') ?? 'チケット発行ありがとうございます。担当者が来るまでしばらくお待ちください。';
             
-            // 重要：文字数制限回避のためメッセージをメモリに保存し、ユニークなID（messageKey）を発行
-            const messageKey = `msg_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            const messageKey = `msg_${Date.now()}`;
             ticketMessages.set(messageKey, panelDesc);
 
             const embed = new EmbedBuilder().setTitle(title).setDescription(description);
-            // customIdには保存したキーだけを入れる（これで100文字を超えない）
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`tkt_${adminRole.id}_${messageKey}`).setLabel('チケットを発行').setStyle(ButtonStyle.Primary)
             );
@@ -80,7 +98,6 @@ client.on('interactionCreate', async interaction => {
             const target = options.getUser('target');
             const member = await interaction.guild.members.fetch(target.id).catch(() => null);
             if (!member) return await interaction.reply({ content: 'メンバー情報が取得できませんでした。', ephemeral: true });
-            
             const roles = member.roles.cache.filter(r => r.name !== '@everyone').map(r => r.name).join('\n') || 'なし';
             await interaction.reply({ content: `**${member.user.tag}** の付与ロール:\n\`\`\`\n${roles}\n\`\`\``, ephemeral: true });
         }
@@ -93,8 +110,23 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
+    // セレクトメニュー処理 (Help)
+    if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'help_select') {
+            let helpMsg = '';
+            const selected = interaction.values[0];
+
+            if (selected === 'help_verify') helpMsg = '# /verify\nこのコマンドを使用すると、ボタンを押したユーザーに指定のロールを付与するパネルを作成します。';
+            if (selected === 'help_ticket') helpMsg = '# /ticket\nこのコマンドを使用すると、チケットを作成するパネルを作成します。管理者のメンションや個別メッセージも設定可能です。';
+            if (selected === 'help_role') helpMsg = '# /role-confirmation\nこのコマンドを使用すると、指定したメンバーが持っているロールを一覧で確認できます。';
+            if (selected === 'help_delete') helpMsg = '# /delete\nこのコマンドは使用したチャンネル内に送信されたメッセージを、指定した数だけ削除します。';
+
+            await interaction.update({ content: helpMsg, embeds: [], components: [interaction.message.components[0]] });
+        }
+    }
+
+    // ボタン処理
     if (interaction.isButton()) {
-        // 二重反応防止
         if (interaction.replied || interaction.deferred) return;
 
         if (interaction.customId.startsWith('v_role_')) {
@@ -106,8 +138,7 @@ client.on('interactionCreate', async interaction => {
         if (interaction.customId.startsWith('tkt_')) {
             const [_, adminRoleId, messageKey] = interaction.customId.split('_');
             const adminRoleMention = `<@&${adminRoleId}>`;
-            // 保存しておいたメッセージを呼び出す
-            const panelDesc = ticketMessages.get(messageKey) ?? 'チケット発行ありがとうございます。担当者が来るまでしばらくお待ちください。';
+            const panelDesc = ticketMessages.get(messageKey) ?? 'チケット発行ありがとうございます。';
 
             const channel = await interaction.guild.channels.create({
                 name: `🎫｜${interaction.user.username}`,
@@ -119,10 +150,7 @@ client.on('interactionCreate', async interaction => {
                 ]
             });
 
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('delete_confirm').setLabel('チケット削除').setStyle(ButtonStyle.Danger)
-            );
-            // 本文、カスタムメッセージ、最後にメンション
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('delete_confirm').setLabel('チケット削除').setStyle(ButtonStyle.Danger));
             await channel.send({ content: `${interaction.user} 様\n${panelDesc}\n\n${adminRoleMention}`, components: [row] });
             await interaction.reply({ content: `チケットを作成しました: ${channel}`, ephemeral: true });
         }
