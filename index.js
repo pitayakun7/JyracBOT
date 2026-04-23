@@ -67,6 +67,16 @@ const commands = [
 client.once('ready', async () => {
     console.log(`${client.user.tag} 起動完了！`);
 
+    // ★追加：起動時に一度だけコマンドをDiscordに反映させる処理
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    try {
+        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+        console.log('Discord APIへのコマンド登録が完了しました！');
+    } catch (error) {
+        console.error('コマンド登録エラー:', error);
+    }
+
+    // ステータスのループ（そのまま）
     let i = 0;
     setInterval(() => {
         client.user.setActivity(activities[i], { type: ActivityType.Custom });
