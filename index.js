@@ -65,13 +65,8 @@ const commands = [
 
 // --- 3. 起動時処理 ---
 client.once('ready', async () => {
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    try {
-        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log(`${client.user.tag} 起動完了！`);
-    } catch (error) {
-        console.error('コマンド登録エラー:', error);
-    }
+    console.log(`${client.user.tag} 起動完了！`);
+
     let i = 0;
     setInterval(() => {
         client.user.setActivity(activities[i], { type: ActivityType.Custom });
