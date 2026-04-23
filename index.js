@@ -6,6 +6,7 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] 
 });
 
+// チケットメッセージを保存するメモリ（文字数制限対策）
 const ticketMessages = new Map();
 
 // --- 2. スラッシュコマンド定義 ---
@@ -42,16 +43,18 @@ app.listen(3000);
 
 // --- 4. メイン処理 ---
 client.on('interactionCreate', async interaction => {
-    // 二重返信防止ガード
-    if (interaction.replied || interaction.deferred) return;
-
+    // 二重返信防止
     if (interaction.isChatInputCommand()) {
         const { commandName, options } = interaction;
 
         if (commandName === 'verify') {
             const role = options.getRole('role');
-            const embed = new EmbedBuilder().setTitle(options.getString('title') ?? 'ロール付与').setDescription(options.getString('description') ?? '認証ボタンを押してロールを取得してください。');
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`v_role_${role.id}`).setLabel('✅認証').setStyle(ButtonStyle.Success));
+            const embed = new EmbedBuilder()
+                .setTitle(options.getString('title') ?? 'ロール付与')
+                .setDescription(options.getString('description') ?? '認証ボタンを押してロールを取得してください。');
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`v_role_${role.id}`).setLabel('✅認証').setStyle(ButtonStyle.Success)
+            );
             await interaction.reply({ embeds: [embed], components: [row] });
         }
 
@@ -61,21 +64,22 @@ client.on('interactionCreate', async interaction => {
             const description = options.getString('description') ?? 'ボタンを押してチケットを作成してください。';
             const panelDesc = options.getString('panel-desc') ?? 'チケット発行ありがとうございます。担当者が来るまでしばらくお待ちください。';
             
-            const messageKey = Date.now().toString();
+            // 重要：文字数制限回避のためメッセージをメモリに保存し、ユニークなID（messageKey）を発行
+            const messageKey = `msg_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
             ticketMessages.set(messageKey, panelDesc);
 
             const embed = new EmbedBuilder().setTitle(title).setDescription(description);
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ticket_${adminRole.id}_${messageKey}`).setLabel('チケットを発行').setStyle(ButtonStyle.Primary));
+            // customIdには保存したキーだけを入れる（これで100文字を超えない）
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`tkt_${adminRole.id}_${messageKey}`).setLabel('チケットを発行').setStyle(ButtonStyle.Primary)
+            );
             await interaction.reply({ embeds: [embed], components: [row] });
         }
 
         if (commandName === 'role-confirmation') {
             const target = options.getUser('target');
             const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-            
-            if (!member) {
-                return await interaction.reply({ content: 'メンバー情報が取得できませんでした。', ephemeral: true });
-            }
+            if (!member) return await interaction.reply({ content: 'メンバー情報が取得できませんでした。', ephemeral: true });
             
             const roles = member.roles.cache.filter(r => r.name !== '@everyone').map(r => r.name).join('\n') || 'なし';
             await interaction.reply({ content: `**${member.user.tag}** の付与ロール:\n\`\`\`\n${roles}\n\`\`\``, ephemeral: true });
@@ -84,22 +88,26 @@ client.on('interactionCreate', async interaction => {
         if (commandName === 'delete') {
             const amount = options.getInteger('amount');
             if (amount < 1 || amount > 100) return await interaction.reply({ content: '1〜100の間で指定してください。', ephemeral: true });
-
             await interaction.channel.bulkDelete(amount, true).catch(console.error);
             await interaction.reply({ content: `${amount} 件のメッセージを削除しました。`, ephemeral: true });
         }
     }
 
     if (interaction.isButton()) {
+        // 二重反応防止
+        if (interaction.replied || interaction.deferred) return;
+
         if (interaction.customId.startsWith('v_role_')) {
-            await interaction.member.roles.add(interaction.customId.split('_')[2]);
+            const roleId = interaction.customId.split('_')[2];
+            await interaction.member.roles.add(roleId).catch(console.error);
             await interaction.reply({ content: 'ロールを付与しました！', ephemeral: true });
         }
 
-        if (interaction.customId.startsWith('ticket_')) {
+        if (interaction.customId.startsWith('tkt_')) {
             const [_, adminRoleId, messageKey] = interaction.customId.split('_');
             const adminRoleMention = `<@&${adminRoleId}>`;
-            const panelDesc = ticketMessages.get(messageKey) ?? 'チケット発行ありがとうございます。';
+            // 保存しておいたメッセージを呼び出す
+            const panelDesc = ticketMessages.get(messageKey) ?? 'チケット発行ありがとうございます。担当者が来るまでしばらくお待ちください。';
 
             const channel = await interaction.guild.channels.create({
                 name: `🎫｜${interaction.user.username}`,
@@ -111,7 +119,10 @@ client.on('interactionCreate', async interaction => {
                 ]
             });
 
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('delete_confirm').setLabel('チケット削除').setStyle(ButtonStyle.Danger));
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('delete_confirm').setLabel('チケット削除').setStyle(ButtonStyle.Danger)
+            );
+            // 本文、カスタムメッセージ、最後にメンション
             await channel.send({ content: `${interaction.user} 様\n${panelDesc}\n\n${adminRoleMention}`, components: [row] });
             await interaction.reply({ content: `チケットを作成しました: ${channel}`, ephemeral: true });
         }
@@ -124,7 +135,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ content: '本当にこのチケットを削除しますか？', components: [row], ephemeral: true });
         }
 
-        if (interaction.customId === 'delete_yes') await interaction.channel.delete();
+        if (interaction.customId === 'delete_yes') await interaction.channel.delete().catch(console.error);
         if (interaction.customId === 'delete_no') await interaction.update({ content: '削除をキャンセルしました。', components: [] });
     }
 });
