@@ -148,7 +148,7 @@ client.on('interactionCreate', async interaction => {
         if (commandName === 'ticket') {
             const adminRole = options.getRole('admin-role');
             const messageKey = `msg_${Date.now()}`;
-            ticketMessages.set(messageKey, options.getString('panel-desc') ?? 'チケット発行ありがとうございます。');
+            ticketMessages.set(messageKey, options.getString('panel-desc') ?? 'チケット発行ありがとうございます。以下の担当者が来るまでお待ち下さい。');
             const embed = new EmbedBuilder().setTitle(options.getString('title') ?? '問い合わせ').setDescription(options.getString('description') ?? 'ボタンを押してチケットを作成。');
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`tkt_${adminRole.id}_${messageKey}`).setLabel('チケットを発行').setStyle(ButtonStyle.Primary));
             await interaction.reply({ embeds: [embed], components: [row] });
