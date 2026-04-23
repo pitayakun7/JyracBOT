@@ -50,7 +50,12 @@ const commands = [
         .addIntegerOption(o => o.setName('amount').setDescription('削除する数 (1-100)').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
     
-    new SlashCommandBuilder().setName('help').setDescription('コマンドの詳細パネルを表示します')
+    new SlashCommandBuilder().setName('help').setDescription('コマンドの詳細パネルを表示します'),
+
+    new SlashCommandBuilder().setName('give-role').setDescription('指定したメンバーにロールを付与します')
+        .addUserOption(o => o.setName('target').setDescription('対象のメンバー').setRequired(true))
+        .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
 ].map(c => {
     const json = c.toJSON();
     json.integration_types = [0, 1]; 
@@ -156,6 +161,25 @@ client.on('interactionCreate', async interaction => {
             if (!member) return ephemeralReply('取得失敗');
             const roles = member.roles.cache.filter(r => r.name !== '@everyone').sort((a,b) => b.position - a.position).map(r => r.name).join('\n') || 'なし';
             await ephemeralReply(`**${member.user.tag}** のロール:\n\`\`\`\n${roles}\n\`\`\``);
+        }
+
+        // 【give-role】指定したメンバーにロールを付与する処理
+        if (commandName === 'give-role') {
+            const targetMember = options.getMember('target');
+            const role = options.getRole('role');
+
+            // 権限チェック：Botが対象ロールより上にいるか、対象メンバーより上にいるか確認
+            if (role.position >= interaction.guild.members.me.roles.highest.position) {
+                return ephemeralReply('❌ 指定されたロールはBotの最高権限ロールよりも高いため付与できません。');
+            }
+
+            try {
+                await targetMember.roles.add(role);
+                await interaction.reply({ content: `✅ ${targetMember.user.tag} に ${role.name} を付与しました！`, ephemeral: true });
+            } catch (error) {
+                console.error(error);
+                await ephemeralReply('❌ ロールの付与に失敗しました。');
+            }
         }
     }
 
