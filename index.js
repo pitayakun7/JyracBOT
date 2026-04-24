@@ -10,7 +10,7 @@ const admin = require('firebase-admin'); // ★追加
 // --- 1. Firebaseの初期化 ---
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT.trim());
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
         });
@@ -124,7 +124,7 @@ client.on('interactionCreate', async interaction => {
     const ephemeralReply = (content, options = {}) => interaction.reply({ ...options, content, flags: MessageFlags.Ephemeral });
     const ephemeralUpdate = (content, options = {}) => interaction.update({ ...options, content, flags: MessageFlags.Ephemeral, embeds: [], components: [] });
 
-    // --- 【権限チェック】の書き換え ---
+    // --- 【権限チェック】 ---
     if (interaction.guild && (interaction.isChatInputCommand() || (interaction.isButton() && (interaction.customId.startsWith('bulk_delete_yes') || interaction.customId === 't_yes')))) {
         
         const botMember = interaction.guild.members.me;
@@ -134,9 +134,6 @@ client.on('interactionCreate', async interaction => {
         const adminDoc = await db.collection('bot_admins').doc(executor.id).get();
         const isBotAdmin = adminDoc.exists;
 
-        // 1. サーバーオーナーである
-        // 2. データベース(Firestore)に登録された管理者である
-        // 3. ロール順位がBotより高い
         const isOwner = executor.id === interaction.guild.ownerId;
         const hasHigherRole = executor.roles.highest.position > botMember.roles.highest.position;
 
@@ -149,21 +146,37 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand()) {
         const { commandName, options } = interaction;
         
-        // ★追加：管理者追加
+        // ★【admin-add】修正：deferReplyを導入
         if (commandName === 'admin-add') {
             const target = options.getUser('target');
-            await db.collection('bot_admins').doc(target.id).set({
-                username: target.tag,
-                addedAt: new Date()
-            });
-            return ephemeralReply(`✅ ${target.tag} をボット管理者に登録しました！`);
+            // まず「保留」する
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            try {
+                await db.collection('bot_admins').doc(target.id).set({
+                    username: target.tag,
+                    addedAt: new Date()
+                });
+                // 保留していた返信を書き換える
+                return await interaction.editReply(`✅ ${target.tag} をボット管理者に登録しました！`);
+            } catch (error) {
+                console.error(error);
+                return await interaction.editReply("❌ データベース登録中にエラーが発生しました。");
+            }
         }
 
-        // ★追加：管理者削除
+        // ★【admin-remove】修正：deferReplyを導入
         if (commandName === 'admin-remove') {
             const target = options.getUser('target');
-            await db.collection('bot_admins').doc(target.id).delete();
-            return ephemeralReply(`🗑️ ${target.tag} をボット管理者から解除しました。`);
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            try {
+                await db.collection('bot_admins').doc(target.id).delete();
+                return await interaction.editReply(`🗑️ ${target.tag} をボット管理者から解除しました。`);
+            } catch (error) {
+                console.error(error);
+                return await interaction.editReply("❌ データベース削除中にエラーが発生しました。");
+            }
         }
 
         // --- 既存のコマンド群 ---
@@ -255,7 +268,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // メニュー・ボタン操作の続き（そのまま）
+    // メニュー・ボタン操作
     if (interaction.isStringSelectMenu() && interaction.customId === 'help_select') {
         const h = {
             help_verify: { title: "/verify", description: "設定したロールを付与することができます。" },
