@@ -40,7 +40,7 @@ const commands = [
         .addStringOption(o => o.setName('panel-desc').setDescription('チケット発行後のメッセージ').setRequired(false))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
 
-    new SlashBuilder = new SlashCommandBuilder().setName('role-confirmation').setDescription('メンバーの付与ロールを確認します')
+    new SlashCommandBuilder().setName('role-confirmation').setDescription('メンバーの付与ロールを確認します')
         .addUserOption(o => o.setName('target').setDescription('対象のメンバー').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
 
@@ -60,7 +60,7 @@ const commands = [
         .addRoleOption(o => o.setName('role').setDescription('剥奪するロール').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
 ].map(c => {
-    const json = typeof c.toJSON === 'function' ? c.toJSON() : c;
+    const json = c.toJSON();
     json.integration_types = [0, 1];
     json.contexts = [0, 1, 2];
     return json;
@@ -200,7 +200,7 @@ client.on('interactionCreate', async interaction => {
             help_verify: { title: "/verify", description: "設定したロールを付与することができます。" },
             help_ticket: { title: "/ticket", description: "チケットを作成して、管理者に問い合わせることができます。" },
             help_role: { title: "/role-confirmation", description: "指定したメンバーのロールを確認できます。" },
-            help_delete: { title: "/delete", description: "一括削除。最新メッセージのリンク確認付。チャンネル内のチャットを消去できます。" }
+            help_delete: { title: "/delete", description: "一括削除。チャンネル内のチャットを消去できます。" }
         };
         const selected = h[interaction.values[0]];
         const embed = new EmbedBuilder().setTitle(`📜 ${selected.title}`).setDescription(selected.description).setColor(0x00AE86);
@@ -222,7 +222,7 @@ client.on('interactionCreate', async interaction => {
                 await interaction.member.roles.add(roleId);
                 await ephemeralReply('付与完了！');
             } catch (error) {
-                await ephemeralReply('❌ ロールの付与に失敗しました。Botの権限またはロールの順位を確認してください。');
+                await ephemeralReply('❌ ロールの付与に失敗しました。Botの権限を確認してください。');
             }
         }
 
