@@ -106,24 +106,21 @@ client.on('interactionCreate', async interaction => {
         }
        if (interaction.commandName === 'notice') {
             const inputPassword = interaction.options.getString('password');
-
-            if (inputPassword !== process.env.ADMIN_PASSWORD) {
-                return await interaction.reply({ content: 'パスワードが違います。', flags: MessageFlags.Ephemeral });
-            }
-
+            if (inputPassword !== process.env.ADMIN_PASSWORD) return await interaction.reply({ content: 'パスワードが違います。', flags: MessageFlags.Ephemeral });
+            
             const modal = new ModalBuilder().setCustomId('notice_modal').setTitle('お知らせ内容入力');
-            // ... (modal.addComponents はそのまま)
-
-            // ★ここを try-catch で囲む
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sender').setLabel('発信者名').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('タイトル').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('内容').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('URL（任意）').setStyle(TextInputStyle.Short).setRequired(false))
+            );
             try {
-                await interaction.showModal(modal);
+                return await interaction.showModal(modal);
             } catch (error) {
                 console.error('モーダル表示失敗:', error);
-                // 既に期限切れの場合は、ユーザーに通知してあげるのが親切です
-                if (error.code === 10062) {
-                    await interaction.followUp({ content: '処理に時間がかかりました。もう一度コマンドを入力してください。', flags: MessageFlags.Ephemeral }).catch(() => {});
-                }
             }
+        }
         if (interaction.commandName === 'help') {
             const embed = new EmbedBuilder().setTitle('📜 コマンドヘルプ').setDescription('詳細を確認したいコマンドを選択してください。').setColor(0x00AE86);
             const select = new StringSelectMenuBuilder().setCustomId('help_select').setPlaceholder('選択...')
