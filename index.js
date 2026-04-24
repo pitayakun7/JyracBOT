@@ -21,7 +21,9 @@ const ticketMessages = new Map();
 const activities = [
     "JYRAC公式Instaはこちら！▶https://www.instagram.com/jyrac_official/",
     "NSF公式Instaはこちら！▶https://www.instagram.com/2024nsfproject/",
-    "ボットに関するお知らせはDiscordID’pitayakun7’まで"
+    "ボットに関するお知らせはDiscordID’pitayakun7’まで",
+    "①広告募集中",
+    "②広告募集中"
 ];
 const intervalSeconds = 15;
 
@@ -48,7 +50,8 @@ const commands = [
         .addIntegerOption(o => o.setName('amount').setDescription('削除する数 (1-100)').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
 
-    new SlashCommandBuilder().setName('help').setDescription('コマンドの詳細パネルを表示します'),
+    new SlashCommandBuilder().setName('help').setDescription('コマンドの詳細パネルを表示します')
+    　　 .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
 
     new SlashCommandBuilder().setName('give-role').setDescription('指定したメンバーにロールを付与します')
         .addUserOption(o => o.setName('target').setDescription('対象のメンバー').setRequired(true))
