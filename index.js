@@ -158,18 +158,28 @@ client.on('interactionCreate', async interaction => {
 
     // モーダル処理
     if (interaction.isModalSubmit()) {
-        if (interaction.customId === 'auth_modal') {
-            if (interaction.fields.getTextInputValue('password') !== process.env.ADMIN_PASSWORD) 
-            return await safeReply({ content: 'パスワードエラー', flags: MessageFlags.Ephemeral });
-            const modal = new ModalBuilder().setCustomId('notice_modal').setTitle('お知らせ内容入力');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sender').setLabel('発信者名').setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('タイトル').setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('内容').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('URL（任意）').setStyle(TextInputStyle.Short).setRequired(false))
-            );
-            return await interaction.showModal(modal);
+        // index.js のメインロジック内、モーダル処理の auth_modal 部分を以下に差し替え
+if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'auth_modal') {
+        const password = interaction.fields.getTextInputValue('password');
+        
+        // パスワードチェック
+        if (password !== process.env.ADMIN_PASSWORD) {
+            return await interaction.reply({ content: 'パスワードエラー', flags: MessageFlags.Ephemeral });
         }
+        
+        // 認証成功時：次のモーダルを表示
+        const modal = new ModalBuilder().setCustomId('notice_modal').setTitle('お知らせ内容入力');
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sender').setLabel('発信者名').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('タイトル').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('内容').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('URL（任意）').setStyle(TextInputStyle.Short).setRequired(false))
+        );
+        
+        // ここが重要：モーダル送信に対してモーダルを返すことはできないので、 一度「認証成功」と返してからモーダルを出すか、showModal を呼び出します。 もしこれでエラーが出るなら、以下の interaction.showModal を使います。
+        return await interaction.showModal(modal); 
+    }
         if (interaction.customId === 'notice_modal') {
             const title = interaction.fields.getTextInputValue('title');
             const content = interaction.fields.getTextInputValue('content');
