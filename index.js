@@ -5,8 +5,23 @@ const {
     ActivityType, MessageFlags 
 } = require('discord.js');
 const express = require('express');
+const admin = require('firebase-admin'); // ★追加
 
-// --- 1. Botの初期化 ---
+// --- 1. Firebaseの初期化 ---
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+        console.log("✅ Firebase initialized successfully!");
+    } catch (e) {
+        console.error("❌ Firebase initialization failed:", e);
+    }
+}
+const db = admin.firestore(); // データベース操作用
+
+// --- 2. Botの初期化 ---
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
@@ -16,10 +31,8 @@ const client = new Client({
     ] 
 });
 
-// チケットパネルごとのメッセージ内容を保持
 const ticketMessages = new Map();
 
-// 【設定】ステータスのループ
 const activities = [
     "JYRAC公式Instはこちら！▶https://www.instagram.com/jyrac_official/",
     "NSF公式Instはこちら！▶https://www.instagram.com/2024nsfproject/",
@@ -29,7 +42,7 @@ const activities = [
 ];
 const intervalSeconds = 15;
 
-// --- 2. スラッシュコマンド定義 ---
+// --- 3. スラッシュコマンド定義 ---
 const commands = [
     new SlashCommandBuilder().setName('verify').setDescription('認証パネルを作成します')
         .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
@@ -53,7 +66,7 @@ const commands = [
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
     
     new SlashCommandBuilder().setName('help').setDescription('コマンドの詳細パネルを表示します')
-    　　 .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
+         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
 
     new SlashCommandBuilder().setName('give-role').setDescription('指定したメンバーにロールを付与します')
         .addUserOption(o => o.setName('target').setDescription('対象のメンバー').setRequired(true))
@@ -64,18 +77,27 @@ const commands = [
         .addUserOption(o => o.setName('target').setDescription('対象のメンバー').setRequired(true))
         .addRoleOption(o => o.setName('role').setDescription('剥奪するロール').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
+
+    // ★追加：ボット管理者追加コマンド
+    new SlashCommandBuilder().setName('admin-add').setDescription('ボット管理者にユーザーを追加します')
+        .addUserOption(o => o.setName('target').setDescription('追加するユーザー').setRequired(true))
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+    // ★追加：ボット管理者削除コマンド
+    new SlashCommandBuilder().setName('admin-remove').setDescription('ボット管理者からユーザーを削除します')
+        .addUserOption(o => o.setName('target').setDescription('削除するユーザー').setRequired(true))
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
 ].map(c => {
     const json = c.toJSON();
     json.integration_types = [0, 1]; 
-    json.contexts = [0, 1, 2];       
+    json.contexts = [0, 1, 2];        
     return json;
 });
 
-// --- 3. 起動時処理 ---
+// --- 4. 起動時処理 ---
 client.once('ready', async () => {
     console.log(`${client.user.tag} 起動完了！`);
-
-    // ★追加：起動時に一度だけコマンドをDiscordに反映させる処理
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
@@ -84,7 +106,6 @@ client.once('ready', async () => {
         console.error('コマンド登録エラー:', error);
     }
 
-    // ステータスのループ（そのまま）
     let i = 0;
     setInterval(() => {
         client.user.setActivity(activities[i], { type: ActivityType.Custom });
@@ -96,28 +117,56 @@ const app = express();
 app.get('/', (req, res) => res.send('Bot is Active!'));
 app.listen(3000);
 
-// --- 4. メインロジック ---
+// --- 5. メインロジック ---
 client.on('interactionCreate', async interaction => {
     if (interaction.replied || interaction.deferred) return;
 
-    // 警告回避用ヘルパー
     const ephemeralReply = (content, options = {}) => interaction.reply({ ...options, content, flags: MessageFlags.Ephemeral });
     const ephemeralUpdate = (content, options = {}) => interaction.update({ ...options, content, flags: MessageFlags.Ephemeral, embeds: [], components: [] });
 
-    // 【権限チェック】操作権限の確認
+    // --- 【権限チェック】の書き換え ---
     if (interaction.guild && (interaction.isChatInputCommand() || (interaction.isButton() && (interaction.customId.startsWith('bulk_delete_yes') || interaction.customId === 't_yes')))) {
+        
         const botMember = interaction.guild.members.me;
         const executor = interaction.member;
-        if (executor.id !== interaction.guild.ownerId && executor.roles.highest.position <= botMember.roles.highest.position) {
-            return ephemeralReply("お持ちのロールに使用権限がありません");
+
+        // Firestoreから管理者データを取得
+        const adminDoc = await db.collection('bot_admins').doc(executor.id).get();
+        const isBotAdmin = adminDoc.exists;
+
+        // 1. サーバーオーナーである
+        // 2. データベース(Firestore)に登録された管理者である
+        // 3. ロール順位がBotより高い
+        const isOwner = executor.id === interaction.guild.ownerId;
+        const hasHigherRole = executor.roles.highest.position > botMember.roles.highest.position;
+
+        if (!isOwner && !isBotAdmin && !hasHigherRole) {
+            return ephemeralReply("お持ちのロールに使用権限がない、またはボット管理者ではありません。");
         }
     }
 
-    // 【スラッシュコマンド】
+    // スラッシュコマンド処理
     if (interaction.isChatInputCommand()) {
         const { commandName, options } = interaction;
         
-        // ヘルプパネル表示
+        // ★追加：管理者追加
+        if (commandName === 'admin-add') {
+            const target = options.getUser('target');
+            await db.collection('bot_admins').doc(target.id).set({
+                username: target.tag,
+                addedAt: new Date()
+            });
+            return ephemeralReply(`✅ ${target.tag} をボット管理者に登録しました！`);
+        }
+
+        // ★追加：管理者削除
+        if (commandName === 'admin-remove') {
+            const target = options.getUser('target');
+            await db.collection('bot_admins').doc(target.id).delete();
+            return ephemeralReply(`🗑️ ${target.tag} をボット管理者から解除しました。`);
+        }
+
+        // --- 既存のコマンド群 ---
         if (commandName === 'help') {
             const embed = new EmbedBuilder().setTitle('📜 コマンドヘルプ').setDescription('詳細を確認したいコマンドを選択してください。').setColor(0x00AE86);
             const select = new StringSelectMenuBuilder().setCustomId('help_select').setPlaceholder('選択...')
@@ -130,7 +179,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(select)], flags: MessageFlags.Ephemeral });
         }
         
-        // メッセージ一括削除確認
         if (commandName === 'delete') {
             const amount = options.getInteger('amount');
             if (amount < 1 || amount > 100) return ephemeralReply('1〜100の間で指定してください。');
@@ -149,7 +197,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ embeds: [embed], components: [row], flags: MessageFlags.Ephemeral });
         }
         
-        // 認証ロール付与ボタン
         if (commandName === 'verify') {
             const role = options.getRole('role');
             const embed = new EmbedBuilder().setTitle(options.getString('title') ?? 'ロール付与').setDescription(options.getString('description') ?? 'ボタンを押して取得。').setColor(0x3498DB);
@@ -157,7 +204,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ embeds: [embed], components: [row] });
         }
         
-        // チケット発行パネル
         if (commandName === 'ticket') {
             const adminRole = options.getRole('admin-role');
             const messageKey = `msg_${Date.now()}`;
@@ -167,7 +213,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ embeds: [embed], components: [row] });
         }
         
-        // ロール確認
         if (commandName === 'role-confirmation') {
             const target = options.getUser('target');
             const member = await interaction.guild.members.fetch(target.id).catch(() => null);
@@ -176,16 +221,12 @@ client.on('interactionCreate', async interaction => {
             await ephemeralReply(`**${member.user.tag}** のロール:\n\`\`\`\n${roles}\n\`\`\``);
         }
 
-        // 【give-role】指定したメンバーにロールを付与する処理
         if (commandName === 'give-role') {
             const targetMember = options.getMember('target');
             const role = options.getRole('role');
-
-            // 権限チェック：Botが対象ロールより上にいるか、対象メンバーより上にいるか確認
             if (role.position >= interaction.guild.members.me.roles.highest.position) {
                 return ephemeralReply('❌ 指定されたロールはBotの最高権限ロールよりも高いため付与できません。');
             }
-
             try {
                 await targetMember.roles.add(role);
                 await interaction.reply({ content: `✅ ${targetMember.user.tag} に ${role.name} を付与しました！`, ephemeral: true });
@@ -195,21 +236,15 @@ client.on('interactionCreate', async interaction => {
             }
         }
 
-        // 【remove-role】指定したメンバーからロールを剥奪する処理
         if (commandName === 'remove-role') {
             const targetMember = options.getMember('target');
             const role = options.getRole('role');
-
-            // 権限チェック：Botが剥奪しようとしているロールより上にいるか確認
             if (role.position >= interaction.guild.members.me.roles.highest.position) {
                 return ephemeralReply('❌ 指定されたロールはBotの最高権限ロールよりも高いため剥奪できません。');
             }
-
-            // メンバーがそのロールを持っているか確認
             if (!targetMember.roles.cache.has(role.id)) {
                 return ephemeralReply(`❌ ${targetMember.user.tag} はそのロールを持っていません。`);
             }
-
             try {
                 await targetMember.roles.remove(role);
                 await interaction.reply({ content: `✅ ${targetMember.user.tag} から ${role.name} を剥奪しました！`, ephemeral: true });
@@ -220,7 +255,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 【メニュー操作】ヘルプ詳細表示
+    // メニュー・ボタン操作の続き（そのまま）
     if (interaction.isStringSelectMenu() && interaction.customId === 'help_select') {
         const h = {
             help_verify: { title: "/verify", description: "設定したロールを付与することができます。" },
@@ -233,9 +268,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.update({ content: null, embeds: [embed], components: [interaction.message.components[0]] });
     }
 
-    // 【ボタン操作】
     if (interaction.isButton()) {
-        // メッセージ削除実行
         if (interaction.customId.startsWith('bulk_delete_yes_')) {
             const amount = parseInt(interaction.customId.split('_')[3]);
             await interaction.channel.bulkDelete(amount, true)
@@ -244,7 +277,6 @@ client.on('interactionCreate', async interaction => {
         }
         if (interaction.customId === 'bulk_delete_no') await ephemeralUpdate('キャンセル。');
 
-        // ロール付与
         if (interaction.customId.startsWith('v_role_')) {
             const roleId = interaction.customId.split('_')[2];
             try {
@@ -255,7 +287,6 @@ client.on('interactionCreate', async interaction => {
             }
         }
 
-        // チケット作成
         if (interaction.customId.startsWith('tkt_')) {
             const [_, adminId, key] = interaction.customId.split('_');
             const desc = ticketMessages.get(key) ?? '以下のロールの担当者が来るまでお待ちください。';
@@ -273,7 +304,6 @@ client.on('interactionCreate', async interaction => {
             await ephemeralReply(`チケット作成: ${channel}`);
         }
 
-        // チケット削除確認表示
         if (interaction.customId === 't_close_c') {
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('t_yes').setLabel('削除する').setStyle(ButtonStyle.Danger),
@@ -282,7 +312,6 @@ client.on('interactionCreate', async interaction => {
             await ephemeralReply('本当に、削除しますか？', { components: [row] });
         }
 
-        // チケット削除実行
         if (interaction.customId === 't_yes') {
             await interaction.channel.delete().catch(() => {});
         }
