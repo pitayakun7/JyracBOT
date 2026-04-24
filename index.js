@@ -158,7 +158,8 @@ client.on('interactionCreate', async interaction => {
     // モーダル処理
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'auth_modal') {
-            if (interaction.fields.getTextInputValue('password') !== 'Jyrac2026') return await safeReply({ content: 'パスワードエラー', flags: MessageFlags.Ephemeral });
+            if (interaction.fields.getTextInputValue('password') !== process.env.ADMIN_PASSWORD) 
+            return await safeReply({ content: 'パスワードエラー', flags: MessageFlags.Ephemeral });
             const modal = new ModalBuilder().setCustomId('notice_modal').setTitle('お知らせ内容入力');
             modal.addComponents(
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sender').setLabel('発信者名').setStyle(TextInputStyle.Short).setRequired(true)),
