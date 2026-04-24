@@ -24,8 +24,8 @@ const activities = [
     "JYRAC公式Instはこちら！▶https://www.instagram.com/jyrac_official/",
     "NSF公式Instはこちら！▶https://www.instagram.com/2024nsfproject/",
     "ボットに関するお問い合わせはDisID’pitayakun7’まで"
-    "広告募集中1"
-    "広告募集中2"
+    "広告募集中1",
+    "広告募集中2",
 ];
 const intervalSeconds = 15;
 
