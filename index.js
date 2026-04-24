@@ -43,7 +43,7 @@ const activities = [
 ];
 const intervalSeconds = 15;
 
-// --- 3. スラッシュコマンド定義 (すべてのパラメータを網羅) ---
+// --- 3. スラッシュコマンド定義 ---
 const commands = [
     new SlashCommandBuilder().setName('verify').setDescription('認証パネルを作成します')
         .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
@@ -118,26 +118,38 @@ app.listen(3000);
 client.on('interactionCreate', async interaction => {
     if (interaction.replied || interaction.deferred) return;
 
-    // --- 【超重要】Unknown Interaction対策：即座に応答を保留する ---
+    // --- Unknown Interaction対策：即座に応答を保留する ---
     if (interaction.isChatInputCommand()) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(console.error);
     } else if (interaction.isButton()) {
-        // 削除確認などは deferUpdate
         if (interaction.customId.startsWith('bulk_delete_confirm_') || interaction.customId === 't_close_yes') {
             await interaction.deferUpdate().catch(console.error);
         }
     }
 
-    // --- 【権限チェック】Firebase管理者・オーナー・ロール順位をすべて考慮 ---
+    // --- 【権限チェック】Firebase ID または Discordの特定権限(ManageChannels等) ---
     if (interaction.guild && interaction.isChatInputCommand()) {
         try {
+            // Firebaseから取得
             const adminDoc = await db.collection('bot_admins').doc(interaction.user.id).get();
-            const isBotAdmin = adminDoc.exists;
-            const isOwner = interaction.user.id === interaction.guild.ownerId;
-            const hasHigherRole = interaction.member.roles.highest.position > interaction.guild.members.me.roles.highest.position;
+            const isBotAdmin = adminDoc.exists; // Firebaseに登録があるか
+            
+            // Discord側の権限（各コマンドで設定した代表的な権限をチェック）
+            const hasDiscordPerms = 
+                interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles) ||
+                interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels) ||
+                interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages) ||
+                interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
-            if (!isBotAdmin && !isOwner && !hasHigherRole) {
-                return await interaction.editReply("❌ お持ちのロールに使用権限がない、またはボット管理者ではありません。").catch(console.error);
+            // サーバーオーナー
+            const isOwner = interaction.user.id === interaction.guild.ownerId;
+
+            // 【判定ロジック】FirebaseにIDがある OR 元々のDiscord権限がある OR オーナー
+            if (isBotAdmin || hasDiscordPerms || isOwner) {
+                // 許可：そのまま下の処理へ進む
+            } else {
+                // 拒否：Firebaseにも登録がなく、Discordの権限（ロール）も足りない場合
+                return await interaction.editReply("❌ お持ちのロールに使用権限がない、またはボット管理者として登録されていません。").catch(console.error);
             }
         } catch (e) {
             console.error("Database Auth Error:", e);
@@ -252,7 +264,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // --- B. メニュー・ボタン処理 (即時応答系) ---
+    // --- B. メニュー・ボタン処理 ---
     if (interaction.isStringSelectMenu() && interaction.customId === 'help_select') {
         const helpData = {
             help_verify: "認証ボタン付きのパネルを設置します。押した人に指定ロールを付与します。",
@@ -270,7 +282,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const cid = interaction.customId;
 
-        // 一括削除実行
         if (cid.startsWith('bulk_delete_confirm_')) {
             const amount = parseInt(cid.split('_')[3]);
             await interaction.channel.bulkDelete(amount, true)
@@ -283,7 +294,6 @@ client.on('interactionCreate', async interaction => {
             return await interaction.reply({ content: '削除をキャンセルしました。', flags: MessageFlags.Ephemeral }).catch(console.error);
         }
 
-        // ロール付与
         if (cid.startsWith('v_role_')) {
             const roleId = cid.split('_')[2];
             try {
@@ -294,7 +304,6 @@ client.on('interactionCreate', async interaction => {
             }
         }
 
-        // チケット作成
         if (cid.startsWith('tkt_')) {
             const [_, adminId, key] = cid.split('_');
             const desc = ticketMessages.get(key) ?? '担当者が来るまでお待ちください。';
