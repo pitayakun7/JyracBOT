@@ -100,8 +100,9 @@ client.on('interactionCreate', async interaction => {
     // スラッシュコマンド
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'receive-notifications') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             await db.collection('subscribers').doc(interaction.user.id).set({ registeredAt: new Date() });
-            return await safeReply({ content: '通知の登録が完了しました！', flags: MessageFlags.Ephemeral });
+            return await interaction.editReply('通知の登録が完了しました！');
         }
         if (interaction.commandName === 'notice') {
             const modal = new ModalBuilder().setCustomId('auth_modal').setTitle('パスワード認証');
