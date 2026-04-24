@@ -52,7 +52,8 @@ const commands = [
         .addIntegerOption(o => o.setName('amount').setDescription('削除する数 (1-100)').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
     
-    new SlashCommandBuilder().setName('help').setDescription('コマンドの詳細パネルを表示します'),
+    new SlashCommandBuilder().setName('help').setDescription('コマンドの詳細パネルを表示します')
+    　　 .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
 
     new SlashCommandBuilder().setName('give-role').setDescription('指定したメンバーにロールを付与します')
         .addUserOption(o => o.setName('target').setDescription('対象のメンバー').setRequired(true))
