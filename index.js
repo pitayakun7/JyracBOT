@@ -56,6 +56,11 @@ const commands = [
         .addUserOption(o => o.setName('target').setDescription('対象のメンバー').setRequired(true))
         .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
+
+    new SlashCommandBuilder().setName('remove-role').setDescription('指定したメンバーからロールを剥奪します')
+        .addUserOption(o => o.setName('target').setDescription('対象のメンバー').setRequired(true))
+        .addRoleOption(o => o.setName('role').setDescription('剥奪するロール').setRequired(true))
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
 ].map(c => {
     const json = c.toJSON();
     json.integration_types = [0, 1]; 
@@ -184,6 +189,30 @@ client.on('interactionCreate', async interaction => {
             } catch (error) {
                 console.error(error);
                 await ephemeralReply('❌ ロールの付与に失敗しました。');
+            }
+        }
+
+        // 【remove-role】指定したメンバーからロールを剥奪する処理
+        if (commandName === 'remove-role') {
+            const targetMember = options.getMember('target');
+            const role = options.getRole('role');
+
+            // 権限チェック：Botが剥奪しようとしているロールより上にいるか確認
+            if (role.position >= interaction.guild.members.me.roles.highest.position) {
+                return ephemeralReply('❌ 指定されたロールはBotの最高権限ロールよりも高いため剥奪できません。');
+            }
+
+            // メンバーがそのロールを持っているか確認
+            if (!targetMember.roles.cache.has(role.id)) {
+                return ephemeralReply(`❌ ${targetMember.user.tag} はそのロールを持っていません。`);
+            }
+
+            try {
+                await targetMember.roles.remove(role);
+                await interaction.reply({ content: `✅ ${targetMember.user.tag} から ${role.name} を剥奪しました！`, ephemeral: true });
+            } catch (error) {
+                console.error(error);
+                await ephemeralReply('❌ ロールの剥奪に失敗しました。');
             }
         }
     }
