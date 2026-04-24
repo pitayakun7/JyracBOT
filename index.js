@@ -40,36 +40,35 @@ const commands = [
         .addStringOption(o => o.setName('title').setDescription('パネルのタイトル'))
         .addStringOption(o => o.setName('description').setDescription('パネルの説明文'))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
-
+    
     new SlashCommandBuilder().setName('ticket').setDescription('チケットパネルを作成')
         .addRoleOption(o => o.setName('admin-role').setDescription('対応する管理ロール').setRequired(true))
         .addStringOption(o => o.setName('title').setDescription('パネルのタイトル'))
         .addStringOption(o => o.setName('description').setDescription('パネルの説明文'))
         .addStringOption(o => o.setName('panel-desc').setDescription('チケット作成時のメッセージ'))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
-
+    
     new SlashCommandBuilder().setName('role-confirmation').setDescription('ロール確認')
         .addUserOption(o => o.setName('target').setDescription('対象のユーザー').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
-
+    
     new SlashCommandBuilder().setName('delete').setDescription('メッセージ削除')
         .addIntegerOption(o => o.setName('amount').setDescription('削除する件数(1-100)').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
-
+    
     new SlashCommandBuilder().setName('help').setDescription('ヘルプを表示'),
-
+    
     new SlashCommandBuilder().setName('give-role').setDescription('ロール付与')
         .addUserOption(o => o.setName('target').setDescription('対象のユーザー').setRequired(true))
         .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
-
+    
     new SlashCommandBuilder().setName('remove-role').setDescription('ロール剥奪')
         .addUserOption(o => o.setName('target').setDescription('対象のユーザー').setRequired(true))
         .addRoleOption(o => o.setName('role').setDescription('剥奪するロール').setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
-
     new SlashCommandBuilder().setName('receive-notifications').setDescription('通知登録'),
-
+    
     new SlashCommandBuilder().setName('notice').setDescription('お知らせを送信する（パスワード認証）')
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
 ].map(c => c.toJSON());
@@ -97,7 +96,7 @@ client.on('interactionCreate', async interaction => {
         }
     };
 
-    // スラッシュコマンド
+    // 1. スラッシュコマンド
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'receive-notifications') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -156,45 +155,30 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // モーダル処理
+    // 2. モーダル処理
     if (interaction.isModalSubmit()) {
-        // index.js のメインロジック内、モーダル処理の auth_modal 部分を以下に差し替え
-if (interaction.isModalSubmit()) {
-    if (interaction.customId === 'auth_modal') {
-        const password = interaction.fields.getTextInputValue('password');
-        
-        // パスワードチェック
-        if (password !== process.env.ADMIN_PASSWORD) {
-            return await interaction.reply({ content: 'パスワードエラー', flags: MessageFlags.Ephemeral });
+        if (interaction.customId === 'auth_modal') {
+            if (interaction.fields.getTextInputValue('password') !== process.env.ADMIN_PASSWORD) {
+                return await interaction.reply({ content: 'パスワードエラー', flags: MessageFlags.Ephemeral });
+            }
+            const modal = new ModalBuilder().setCustomId('notice_modal').setTitle('お知らせ内容入力');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sender').setLabel('発信者名').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('タイトル').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('内容').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('URL（任意）').setStyle(TextInputStyle.Short).setRequired(false))
+            );
+            return await interaction.showModal(modal);
         }
-        
-        // 認証成功時：次のモーダルを表示
-        const modal = new ModalBuilder().setCustomId('notice_modal').setTitle('お知らせ内容入力');
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sender').setLabel('発信者名').setStyle(TextInputStyle.Short).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('タイトル').setStyle(TextInputStyle.Short).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('内容').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('URL（任意）').setStyle(TextInputStyle.Short).setRequired(false))
-        );
-        
-        // ここが重要：モーダル送信に対してモーダルを返すことはできないので、 一度「認証成功」と返してからモーダルを出すか、showModal を呼び出します。 もしこれでエラーが出るなら、以下の interaction.showModal を使います。
-        return await interaction.showModal(modal); 
-    }
         if (interaction.customId === 'notice_modal') {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const title = interaction.fields.getTextInputValue('title');
             const content = interaction.fields.getTextInputValue('content');
             const url = interaction.fields.getTextInputValue('url');
             const sender = interaction.fields.getTextInputValue('sender');
-
-            const embed = new EmbedBuilder()
-                .setTitle(`📢 ${title}`)
-                .setDescription(`${content}\n\n${url ? `🔗 [詳細はこちら](${url})` : ''}`)
-                .setFooter({ text: `発信者: ${sender}` })
-                .setColor(0x00FF00);
-
+            const embed = new EmbedBuilder().setTitle(`📢 ${title}`).setDescription(`${content}\n\n${url ? `🔗 [詳細はこちら](${url})` : ''}`).setFooter({ text: `発信者: ${sender}` }).setColor(0x00FF00);
             const subs = await db.collection('subscribers').get();
             let successCount = 0;
-            
             for (const doc of subs.docs) {
                 try {
                     const user = await client.users.fetch(doc.id);
@@ -202,11 +186,11 @@ if (interaction.isModalSubmit()) {
                     successCount++;
                 } catch (e) { console.log(`送信失敗: ${doc.id}`); }
             }
-            return await safeReply({ content: `お知らせを ${successCount} 名に送信しました。`, flags: MessageFlags.Ephemeral });
+            return await interaction.editReply(`お知らせを ${successCount} 名に送信しました。`);
         }
     }
 
-    // ボタン・メニュー
+    // 3. ボタン・メニュー
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         if (interaction.customId.startsWith('bulk_delete_yes_')) {
             await interaction.channel.bulkDelete(parseInt(interaction.customId.split('_')[3]), true);
