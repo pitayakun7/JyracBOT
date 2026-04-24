@@ -117,8 +117,7 @@ app.listen(3000);
 client.on('interactionCreate', async interaction => {
     if (interaction.replied || interaction.deferred) return;
 
-    // ★まず最初に保留する（3秒の壁対策）
-    // スラッシュコマンド、または特定のボタン操作時に実行
+    // ★保留(defer)の判定
     const isCommand = interaction.isChatInputCommand();
     const isConfirmButton = interaction.isButton() && (interaction.customId.startsWith('bulk_delete_yes') || interaction.customId === 't_yes');
 
@@ -126,21 +125,25 @@ client.on('interactionCreate', async interaction => {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     }
 
-    // --- 【権限チェック】 ---
+    // --- 【権限チェック：修正版】 ---
     if (interaction.guild && (isCommand || isConfirmButton)) {
         const botMember = interaction.guild.members.me;
         const executor = interaction.member;
 
-        // ドキュメントID（名前部分）がユーザーID（数字）と一致するか探す
+        // Firestoreから管理者データを取得
         const adminDoc = await db.collection('bot_admins').doc(executor.id).get();
-        const isBotAdmin = adminDoc.exists;
+        const isBotAdmin = adminDoc.exists; // FirestoreにIDがあればtrue
 
-        const isOwner = executor.id === interaction.guild.ownerId;
-        const hasHigherRole = executor.roles.highest.position > botMember.roles.highest.position;
+        const isOwner = executor.id === interaction.guild.ownerId; // サーバー主ならtrue
 
-        if (!isOwner && !isBotAdmin && !hasHigherRole) {
-            return await interaction.editReply("❌ 権限がありません。ボット管理者に登録されているか確認してください。");
+        // ロールの強さチェック（管理者でもオーナーでもない場合のみ実行）
+        if (!isBotAdmin && !isOwner) {
+            const hasHigherRole = executor.roles.highest.position > botMember.roles.highest.position;
+            if (!hasHigherRole) {
+                return await interaction.editReply("❌ 権限がありません。ボット管理者に登録されているか、ボットより高いロールを持っている必要があります。");
+            }
         }
+        // 管理者またはオーナーの場合は、ここを通り抜けて処理が続行されます。
     }
 
     // スラッシュコマンド処理
@@ -151,13 +154,12 @@ client.on('interactionCreate', async interaction => {
         if (commandName === 'admin-add') {
             const target = options.getUser('target');
             try {
-                // ドキュメントの名前を「ID（数字）」にして保存
                 await db.collection('bot_admins').doc(target.id).set({
                     username: target.username,
                     userId: target.id,
                     addedAt: new Date()
                 });
-                return await interaction.editReply(`✅ **${target.username}** を管理者に登録しました！`);
+                return await interaction.editReply(`✅ **${target.username}** をボット管理者に登録しました！`);
             } catch (error) {
                 console.error(error);
                 return await interaction.editReply("❌ データベース登録エラー。");
@@ -209,7 +211,6 @@ client.on('interactionCreate', async interaction => {
             const role = options.getRole('role');
             const embed = new EmbedBuilder().setTitle(options.getString('title') ?? 'ロール付与').setDescription(options.getString('description') ?? 'ボタンを押して取得。').setColor(0x3498DB);
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`v_role_${role.id}`).setLabel('✅ 認証').setStyle(ButtonStyle.Success));
-            // チャンネルに設置するパネルはEphemeralではないため、一旦保留を解除して送信
             await interaction.deleteReply(); 
             return await interaction.channel.send({ embeds: [embed], components: [row] });
         }
@@ -236,11 +237,11 @@ client.on('interactionCreate', async interaction => {
             const targetMember = options.getMember('target');
             const role = options.getRole('role');
             if (role.position >= interaction.guild.members.me.roles.highest.position) {
-                return await interaction.editReply('❌ Botの権限不足。');
+                return await interaction.editReply('❌ Botの権限不足（ロール順位を確認してください）。');
             }
             try {
                 await targetMember.roles.add(role);
-                return await interaction.editReply(`✅ ${targetMember.user.tag} に付与完了。`);
+                return await interaction.editReply(`✅ ${targetMember.user.tag} にロールを付与しました。`);
             } catch (e) {
                 return await interaction.editReply('❌ 付与失敗。');
             }
@@ -250,11 +251,11 @@ client.on('interactionCreate', async interaction => {
             const targetMember = options.getMember('target');
             const role = options.getRole('role');
             if (role.position >= interaction.guild.members.me.roles.highest.position) {
-                return await interaction.editReply('❌ Botの権限不足。');
+                return await interaction.editReply('❌ Botの権限不足（ロール順位を確認してください）。');
             }
             try {
                 await targetMember.roles.remove(role);
-                return await interaction.editReply(`✅ ${targetMember.user.tag} から剥奪完了。`);
+                return await interaction.editReply(`✅ ${targetMember.user.tag} からロールを剥奪しました。`);
             } catch (e) {
                 return await interaction.editReply('❌ 剥奪失敗。');
             }
@@ -267,7 +268,7 @@ client.on('interactionCreate', async interaction => {
             help_verify: { title: "/verify", description: "設定したロールを付与することができます。" },
             help_ticket: { title: "/ticket", description: "チケットを作成して、管理者に問い合わせることができます。" },
             help_role: { title: "/role-confirmation", description: "指定したメンバーのロールを確認できます。" },
-            help_delete: { title: "/delete", description: "最新メッセージのリンク確認付一括削除。" }
+            help_delete: { title: "/delete", description: "メッセージの一括削除（確認機能付き）。" }
         };
         const selected = h[interaction.values[0]];
         const embed = new EmbedBuilder().setTitle(`📜 ${selected.title}`).setDescription(selected.description).setColor(0x00AE86);
@@ -279,20 +280,20 @@ client.on('interactionCreate', async interaction => {
             const amount = parseInt(interaction.customId.split('_')[3]);
             await interaction.channel.bulkDelete(amount, true)
                 .then(m => interaction.editReply(`✅ ${m.size}件削除しました。`))
-                .catch(() => interaction.editReply("❌ 14日以上前のは削除不可。"));
+                .catch(() => interaction.editReply("❌ 14日以上前のメッセージは削除できません。"));
         }
         if (interaction.customId === 'bulk_delete_no') {
-            if (interaction.deferred) await interaction.editReply('キャンセル。');
-            else await interaction.reply({ content: 'キャンセル。', flags: MessageFlags.Ephemeral });
+            if (interaction.deferred) await interaction.editReply('キャンセルしました。');
+            else await interaction.reply({ content: 'キャンセルしました。', flags: MessageFlags.Ephemeral });
         }
 
         if (interaction.customId.startsWith('v_role_')) {
             const roleId = interaction.customId.split('_')[2];
             try {
                 await interaction.member.roles.add(roleId);
-                await interaction.reply({ content: '付与完了！', flags: MessageFlags.Ephemeral });
+                await interaction.reply({ content: 'ロールを付与しました！', flags: MessageFlags.Ephemeral });
             } catch (error) {
-                await interaction.reply({ content: '❌ 権限エラー。', flags: MessageFlags.Ephemeral });
+                await interaction.reply({ content: '❌ 権限エラー。Botのロール順位を確認してください。', flags: MessageFlags.Ephemeral });
             }
         }
 
@@ -310,7 +311,7 @@ client.on('interactionCreate', async interaction => {
             });
             const btn = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('t_close_c').setLabel('チケットを閉じる').setStyle(ButtonStyle.Danger));
             await channel.send({ content: `${interaction.user} 様\n${desc}\n\n<@&${adminId}>`, components: [btn] });
-            await interaction.reply({ content: `チケット作成: ${channel}`, flags: MessageFlags.Ephemeral });
+            await interaction.reply({ content: `チケットを作成しました: ${channel}`, flags: MessageFlags.Ephemeral });
         }
 
         if (interaction.customId === 't_close_c') {
@@ -318,7 +319,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId('t_yes').setLabel('削除する').setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('t_no').setLabel('キャンセル').setStyle(ButtonStyle.Secondary)
             );
-            await interaction.reply({ content: '本当に削除しますか？', components: [row], flags: MessageFlags.Ephemeral });
+            await interaction.reply({ content: 'このチケットを完全に削除しますか？', components: [row], flags: MessageFlags.Ephemeral });
         }
 
         if (interaction.customId === 't_yes') {
