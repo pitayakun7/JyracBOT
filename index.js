@@ -69,8 +69,9 @@ const commands = [
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
     new SlashCommandBuilder().setName('receive-notifications').setDescription('通知登録'),
     
-    new SlashCommandBuilder().setName('notice').setDescription('お知らせを送信する（パスワード認証）')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
+   new SlashCommandBuilder().setName('notice').setDescription('お知らせ送信')
+    .addStringOption(o => o.setName('password').setDescription('パスワード').setRequired(true))
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
 ].map(c => c.toJSON());
 
 // --- 3. 起動時処理 ---
@@ -104,10 +105,21 @@ client.on('interactionCreate', async interaction => {
             return await interaction.editReply('通知の登録が完了しました！');
         }
         if (interaction.commandName === 'notice') {
-            const modal = new ModalBuilder().setCustomId('auth_modal').setTitle('パスワード認証');
-            modal.addComponents(new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('password').setLabel('パスワードを入力').setStyle(TextInputStyle.Short).setRequired(true)
-            ));
+            const inputPassword = interaction.options.getString('password');
+
+            // パスワードチェック：合っていなければ即座に終了
+            if (inputPassword !== process.env.ADMIN_PASSWORD) {
+                return await interaction.reply({ content: 'パスワードが違います。', flags: MessageFlags.Ephemeral });
+            }
+
+            // 合っていれば、いきなり「お知らせ入力用」のモーダルを出す
+            const modal = new ModalBuilder().setCustomId('notice_modal').setTitle('お知らせ内容入力');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sender').setLabel('発信者名').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('タイトル').setStyle(TextInputStyle.Short).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('内容').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('URL（任意）').setStyle(TextInputStyle.Short).setRequired(false))
+            );
             return await interaction.showModal(modal);
         }
         if (interaction.commandName === 'help') {
@@ -157,19 +169,6 @@ client.on('interactionCreate', async interaction => {
 
     // 2. モーダル処理
     if (interaction.isModalSubmit()) {
-        if (interaction.customId === 'auth_modal') {
-            if (interaction.fields.getTextInputValue('password') !== process.env.ADMIN_PASSWORD) {
-                return await interaction.reply({ content: 'パスワードエラー', flags: MessageFlags.Ephemeral });
-            }
-            const modal = new ModalBuilder().setCustomId('notice_modal').setTitle('お知らせ内容入力');
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sender').setLabel('発信者名').setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('タイトル').setStyle(TextInputStyle.Short).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('内容').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('URL（任意）').setStyle(TextInputStyle.Short).setRequired(false))
-            );
-            return await interaction.showModal(modal);
-        }
         if (interaction.customId === 'notice_modal') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const title = interaction.fields.getTextInputValue('title');
