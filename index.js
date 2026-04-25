@@ -100,8 +100,17 @@ client.on('interactionCreate', async interaction => {
             try { await interaction.showModal(modal); } catch (e) { console.error(e); }
         }
         if (commandName === 'help') {
-            const embed = new EmbedBuilder().setTitle('📜 コマンドヘルプ').setDescription('詳細を確認したいコマンドを選択してください。').setColor(0x00AE86);
-            const select = new StringSelectMenuBuilder().setCustomId('help_select').setPlaceholder('選択...').addOptions([{ label: '/verify', value: 'help_verify' }, { label: '/ticket', value: 'help_ticket' }, { label: '/role-confirmation', value: 'help_role' }, { label: '/delete', value: 'help_delete' }]);
+            const embed = new EmbedBuilder().setTitle('📜 コマンド一覧').setDescription('詳細を確認したいコマンドを選択してください。').setColor(0x00AE86);
+            const select = new StringSelectMenuBuilder().setCustomId('help_select').setPlaceholder('コマンドを選択...').addOptions([
+                { label: '/verify', value: 'help_verify' },
+                { label: '/ticket', value: 'help_ticket' },
+                { label: '/role-confirmation', value: 'help_role' },
+                { label: '/delete', value: 'help_delete' },
+                { label: '/give-role', value: 'help_giverole' },
+                { label: '/remove-role', value: 'help_removerole' },
+                { label: '/notice', value: 'help_notice' },
+                { label: '/receive-notifications', value: 'help_notify' }
+            ]);
             return await safeReply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(select)], flags: MessageFlags.Ephemeral });
         }
         if (commandName === 'delete') {
