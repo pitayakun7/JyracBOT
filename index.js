@@ -197,8 +197,23 @@ client.on('interactionCreate', async interaction => {
         }
         if (customId === 't_yes') await interaction.channel.delete();
         if (customId === 'help_select') {
-            const h = { help_verify: '【ロール付与】\n認証パネルを作成します。', help_ticket: '【チケット作成】\n問い合わせ用パネルを作成します。', help_role: '【ロール確認】\n指定したユーザーの現在のロールを表示します。', help_delete: '【一括削除】\n指定した件数のメッセージを削除します。' };
-            await interaction.update({ embeds: [new EmbedBuilder().setTitle(interaction.values[0]).setDescription(h[interaction.values[0]]).setColor(0x00AE86)], components: [interaction.message.components[0]] });
+            const helpData = {
+                help_verify: { title: '/verify', desc: '【内容】認証パネルを作成します。\n【詳細】ボタンを押したユーザーに指定したロールを付与します。' },
+                help_ticket: { title: '/ticket', desc: '【内容】チケットパネルを作成します。\n【詳細】問い合わせチャンネルを生成し、管理者へ通知します。' },
+                help_role: { title: '/role-confirmation', desc: '【内容】ロール確認\n【詳細】指定した対象の現在のロール一覧を表示します。' },
+                help_delete: { title: '/delete', desc: '【内容】メッセージ一括削除\n【詳細】指定した件数(1-100)のメッセージを削除します。' },
+                help_giverole: { title: '/give-role', desc: '【内容】ロール付与\n【詳細】指定したユーザーに特定のロールを付与します。' },
+                help_removerole: { title: '/remove-role', desc: '【内容】ロール剥奪\n【詳細】指定したユーザーから特定のロールを剥奪します。' },
+                help_notice: { title: '/notice', desc: '【内容】お知らせ送信\n【詳細】パスワード認証後、通知登録者全員に一斉DMを送信します。' },
+                help_notify: { title: '/receive-notifications', desc: '【内容】通知登録\n【詳細】お知らせを受け取るためのリストに自身を登録します。' }
+            };
+            
+            const selected = interaction.values[0];
+            const data = helpData[selected];
+            await interaction.update({ 
+                embeds: [new EmbedBuilder().setTitle(`📖 ${data.title}`).setDescription(data.desc).setColor(0x00AE86)], 
+                components: [interaction.message.components[0]] 
+            });
         }
     }
 });
