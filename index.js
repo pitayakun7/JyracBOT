@@ -47,21 +47,43 @@ const commands = [
     
     new SlashCommandBuilder().setName('help').setDescription('コマンド一覧と詳細を表示'),
     
-    new SlashCommandBuilder().setName('give-role').setDescription('ロールを付与')
-    .addUserOption(o => o.setName('target').setDescription('対象').setRequired(true))
-    .addRoleOption(o => o.setName('role').setDescription('ロール').setRequired(true))
+    // give-role コマンドの定義
+　　new SlashCommandBuilder().setName('give-role').setDescription('複数のユーザーにロールを付与')
+    .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
+    .addUserOption(o => o.setName('target1').setDescription('対象1').setRequired(true))
+    .addUserOption(o => o.setName('target2').setDescription('対象2'))
+    .addUserOption(o => o.setName('target3').setDescription('対象3'))
+    .addUserOption(o => o.setName('target4').setDescription('対象4'))
+    .addUserOption(o => o.setName('target5').setDescription('対象5'))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
-    
-    new SlashCommandBuilder().setName('remove-role').setDescription('ロールを剥奪')
-    .addUserOption(o => o.setName('target').setDescription('対象').setRequired(true))
-    .addRoleOption(o => o.setName('role').setDescription('ロール').setRequired(true))
+　　new SlashCommandBuilder().setName('give-role').setDescription('複数のユーザーにロールを付与')
+    .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
+    .addUserOption(o => o.setName('target1').setDescription('対象1').setRequired(true))
+    .addUserOption(o => o.setName('target2').setDescription('対象2'))
+    .addUserOption(o => o.setName('target3').setDescription('対象3'))
+    .addUserOption(o => o.setName('target4').setDescription('対象4'))
+    .addUserOption(o => o.setName('target5').setDescription('対象5'))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
-    
+
     new SlashCommandBuilder().setName('receive-notifications').setDescription('重要なお知らせの通知登録を行う'),
     
     new SlashCommandBuilder().setName('notice').setDescription('お知らせを送信(管理者専用)')
     .addStringOption(o => o.setName('password').setDescription('認証パスワード').setRequired(true))
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
+
+    new SlashCommandBuilder().setName('set-vc-log-channel').setDescription('VCログの送信先チャンネルを設定')
+    .addChannelOption(o => o.setName('channel').setDescription('ログを送るチャンネル').addChannelTypes(ChannelType.GuildText).setRequired(true))
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+
+　　new SlashCommandBuilder().setName('record-vc-log').setDescription('現在のVCログを記録し送信')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+
+    new SlashCommandBuilder().setName('set-text-log-channel').setDescription('テキストログの送信先を設定')
+    .addChannelOption(o => o.setName('channel').setDescription('送信先').addChannelTypes(ChannelType.GuildText).setRequired(true))
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+
+　　new SlashCommandBuilder().setName('register-text-log').setDescription('現在のチャンネルをログ監視対象にする')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
 ].map(c => c.toJSON());
 
 client.once('clientReady', async () => {
@@ -75,6 +97,23 @@ client.once('clientReady', async () => {
 const app = express();
 app.get('/', (req, res) => res.send('Bot is Active!'));
 app.listen(3000);
+
+client.on('interactionCreate', async interaction => {
+    if (interaction.replied || interaction.deferred) return;
+    const safeReply = async (data) => { if (!interaction.replied && !interaction.deferred) return await interaction.reply(data); };
+
+client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
+    const doc = await db.collection('text_logs_config').doc(message.channel.id).get();
+    if (doc.exists) {
+        await db.collection('text_logs').add({
+            channelId: message.channel.id,
+            content: message.content,
+            author: message.author.tag,
+            timestamp: new Date()
+        });
+    }
+});
 
 client.on('interactionCreate', async interaction => {
     if (interaction.replied || interaction.deferred) return;
@@ -138,13 +177,72 @@ client.on('interactionCreate', async interaction => {
             const roles = member.roles.cache.filter(r => r.name !== '@everyone').map(r => r.name).join('\n') || 'なし';
             return await safeReply({ content: `ロール一覧:\n\`\`\`\n${roles}\n\`\`\``, flags: MessageFlags.Ephemeral });
         }
-        if (['give-role', 'remove-role'].includes(commandName)) {
-            const member = options.getMember('target');
+        if (commandName === 'give-role' || commandName === 'remove-role') {
             const role = options.getRole('role');
-            commandName === 'give-role' ? await member.roles.add(role) : await member.roles.remove(role);
-            return await safeReply({ content: '完了しました！', flags: MessageFlags.Ephemeral });
+            const targets = ['target1', 'target2', 'target3', 'target4', 'target5'];
+            let count = 0;
+
+            for (const t of targets) {
+                const user = options.getUser(t);
+                if (user) {
+                    try {
+                        const member = await interaction.guild.members.fetch(user.id);
+                        if (commandName === 'give-role') {
+                            await member.roles.add(role);
+                        } else {
+                            await member.roles.remove(role);
+                        }
+                        count++;
+                    } catch (err) {
+                        console.error(`処理失敗: ${user.tag}`, err);
+                    }
+                }
+            }
+            return await safeReply({ content: `${count} 名に対してロールの${commandName === 'give-role' ? '付与' : '剥奪'}が完了しました。`, flags: MessageFlags.Ephemeral });
         }
-    }
+        if (commandName === 'set-vc-log-channel') {
+        const channel = options.getChannel('channel');
+        await db.collection('settings').doc(interaction.guild.id).set({ vcLogChannel: channel.id }, { merge: true });
+        return await safeReply({ content: `ログ送信先を ${channel} に設定しました。`, flags: MessageFlags.Ephemeral });
+        }
+        if (commandName === 'record-vc-log') {
+    // 1. 設定チャンネルの取得
+        const settings = await db.collection('settings').doc(interaction.guild.id).get();
+        const logChannelId = settings.data()?.vcLogChannel;
+        if (!logChannelId) return await safeReply({ content: '先に /set-vc-log-channel でチャンネルを設定してください。', flags: MessageFlags.Ephemeral });
+        const logChannel = await interaction.guild.channels.fetch(logChannelId);
+
+    // 2. VC情報の取得（コマンド実行者が参加しているVC、またはVC内の情報を検索）
+    // ※今回は「コマンド実行者がVCにいること」を条件とする実装例です
+        const member = await interaction.guild.members.fetch(interaction.user.id);
+        const vc = member.voice.channel;
+        if (!vc) return await safeReply({ content: 'ボイスチャンネルに参加してください。', flags: MessageFlags.Ephemeral });
+
+        const members = vc.members.map(m => m.displayName).join(', ');
+        const date = new Date().toLocaleString('ja-JP');
+
+    // 3. 即時送信
+        const embed = new EmbedBuilder()
+        .setTitle('🎙️ ボイスチャット参加ログ')
+        .addFields(
+            { name: '日時', value: date },
+            { name: '場所', value: vc.name },
+            { name: '参加メンバー', value: members || 'なし' }
+        ).setColor(0x00FF00);
+    
+        await logChannel.send({ embeds: [embed] });
+        return await safeReply({ content: `ログを ${logChannel} に送信しました。`, flags: MessageFlags.Ephemeral });
+　　　　 }
+        if (commandName === 'set-text-log-channel') {
+            const channel = options.getChannel('channel');
+            await db.collection('settings').doc(interaction.guild.id).set({ textLogChannel: channel.id }, { merge: true });
+            return await safeReply({ content: `テキストログ送信先を ${channel} に設定しました。`, flags: MessageFlags.Ephemeral });
+        }
+        if (commandName === 'register-text-log') {
+            await db.collection('text_logs_config').doc(interaction.channel.id).set({ registeredAt: new Date() });
+            return await safeReply({ content: `このチャンネルをログ監視対象に登録しました。`, flags: MessageFlags.Ephemeral });
+        }
+}
 
     if (interaction.isModalSubmit() && interaction.customId === 'notice_modal') {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
