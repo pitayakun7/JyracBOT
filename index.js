@@ -24,24 +24,30 @@ const activities = [
 ];
 
 const commands = [
+    
     new SlashCommandBuilder().setName('verify').setDescription('認証パネルを作成')
     .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
     .addStringOption(o => o.setName('title').setDescription('パネルタイトル'))
     .addStringOption(o => o.setName('description').setDescription('説明文'))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
+    
     new SlashCommandBuilder().setName('ticket').setDescription('チケットパネルを作成')
     .addRoleOption(o => o.setName('admin-role').setDescription('対応管理ロール').setRequired(true))
     .addStringOption(o => o.setName('title').setDescription('タイトル'))
     .addStringOption(o => o.setName('description').setDescription('説明文'))
     .addStringOption(o => o.setName('panel-desc').setDescription('チケット作成時メッセージ'))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+    
     new SlashCommandBuilder().setName('role-confirmation').setDescription('指定ユーザーのロールを確認')
     .addUserOption(o => o.setName('target').setDescription('確認対象').setRequired(true))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
+    
     new SlashCommandBuilder().setName('delete').setDescription('メッセージを一括削除')
     .addIntegerOption(o => o.setName('amount').setDescription('件数(1-100)').setRequired(true))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
+    
     new SlashCommandBuilder().setName('help').setDescription('コマンド一覧と詳細を表示'),
+    
     new SlashCommandBuilder().setName('give-role').setDescription('複数のユーザーにロールを付与')
     .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
     .addUserOption(o => o.setName('target1').setDescription('対象1').setRequired(true))
@@ -50,6 +56,7 @@ const commands = [
     .addUserOption(o => o.setName('target4').setDescription('対象4'))
     .addUserOption(o => o.setName('target5').setDescription('対象5'))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
+    
     new SlashCommandBuilder().setName('remove-role').setDescription('複数のユーザーからロールを剥奪')
     .addRoleOption(o => o.setName('role').setDescription('剥奪するロール').setRequired(true))
     .addUserOption(o => o.setName('target1').setDescription('対象1').setRequired(true))
@@ -58,20 +65,36 @@ const commands = [
     .addUserOption(o => o.setName('target4').setDescription('対象4'))
     .addUserOption(o => o.setName('target5').setDescription('対象5'))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
+    
     new SlashCommandBuilder().setName('receive-notifications').setDescription('重要なお知らせの通知登録を行う'),
+    
     new SlashCommandBuilder().setName('notice').setDescription('お知らせを送信(管理者専用)')
     .addStringOption(o => o.setName('password').setDescription('認証パスワード').setRequired(true))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
-    new SlashCommandBuilder().setName('set-vc-log-channel').setDescription('VCログの送信先チャンネルを設定')
-    .addChannelOption(o => o.setName('channel').setDescription('ログを送るチャンネル').addChannelTypes(ChannelType.GuildText).setRequired(true))
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+    
     new SlashCommandBuilder().setName('record-vc-log').setDescription('現在のVCログを記録し送信')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
-    new SlashCommandBuilder().setName('set-text-log-channel').setDescription('テキストログの送信先を設定')
-    .addChannelOption(o => o.setName('channel').setDescription('送信先').addChannelTypes(ChannelType.GuildText).setRequired(true))
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+    
     new SlashCommandBuilder().setName('register-text-log').setDescription('現在のチャンネルをログ監視対象にする')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+
+    new SlashCommandBuilder().setName('set-vc-log').setDescription('VCログ対象のVCと送信先を設定')
+        .addChannelOption(o => o.setName('vc').setDescription('監視するVC').addChannelTypes(ChannelType.GuildVoice).setRequired(true))
+        .addChannelOption(o => o.setName('log').setDescription('ログ送信先').addChannelTypes(ChannelType.GuildText).setRequired(true))
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+    
+    new SlashCommandBuilder().setName('unset-vc-log').setDescription('VCログ設定を解除')
+        .addChannelOption(o => o.setName('vc').setDescription('解除するVC').addChannelTypes(ChannelType.GuildVoice).setRequired(true))
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+    
+    new SlashCommandBuilder().setName('set-text-log').setDescription('テキストログ対象チャンネルを設定')
+        .addChannelOption(o => o.setName('channel').setDescription('監視対象').addChannelTypes(ChannelType.GuildText).setRequired(true))
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+    
+    new SlashCommandBuilder().setName('unset-text-log').setDescription('テキストログ設定を解除')
+        .addChannelOption(o => o.setName('channel').setDescription('解除対象').addChannelTypes(ChannelType.GuildText).setRequired(true))
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
+    
 ].map(c => c.toJSON());
 
 client.once('ready', async () => {
@@ -82,13 +105,19 @@ client.once('ready', async () => {
     }, 15000);
 });
 
+client.once('ready', async () => {
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+});
+
 const app = express();
 app.get('/', (req, res) => res.send('Bot is Active!'));
 app.listen(3000);
 
+// テキストログ監視
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
-    const doc = await db.collection('text_logs_config').doc(message.channel.id).get();
+    const doc = await db.collection('text_log_settings').doc(message.channel.id).get();
     if (doc.exists) {
         await db.collection('text_logs').add({
             channelId: message.channel.id,
@@ -99,12 +128,29 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-client.on('interactionCreate', async interaction => {
-    if (interaction.replied || interaction.deferred) return;
-    const safeReply = async (data) => { if (!interaction.replied && !interaction.deferred) return await interaction.reply(data); };
+// ボイス状態監視（入退室時）
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    const vcId = newState.channelId || oldState.channelId;
+    const config = await db.collection('vc_log_settings').doc(vcId).get();
+    if (!config.exists) return;
 
-    if (interaction.isChatInputCommand()) {
-        const { commandName, options } = interaction;
+    const logChannelId = config.data().logChannelId;
+    const logChannel = await newState.guild.channels.fetch(logChannelId).catch(() => null);
+    if (!logChannel) return;
+
+    const user = newState.member.displayName;
+    const action = !oldState.channelId ? '入室' : !newState.channelId ? '退室' : '移動';
+    
+    if (action !== '移動') {
+        const embed = new EmbedBuilder().setTitle('🎙️ VCログ').setDescription(`${user} が ${action} しました。`).setColor(0x00FF00).setTimestamp();
+        await logChannel.send({ embeds: [embed] });
+    }
+});
+
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+
+    const { commandName, options } = interaction;
         if (commandName === 'receive-notifications') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             await db.collection('subscribers').doc(interaction.user.id).set({ registeredAt: new Date() });
@@ -173,11 +219,6 @@ client.on('interactionCreate', async interaction => {
             }
             return await safeReply({ content: `${count} 名に対してロールの${commandName === 'give-role' ? '付与' : '剥奪'}が完了しました。`, flags: MessageFlags.Ephemeral });
         }
-        if (commandName === 'set-vc-log-channel') {
-            const channel = options.getChannel('channel');
-            await db.collection('settings').doc(interaction.guild.id).set({ vcLogChannel: channel.id }, { merge: true });
-            return await safeReply({ content: `ログ送信先を ${channel} に設定しました。`, flags: MessageFlags.Ephemeral });
-        }
         if (commandName === 'record-vc-log') {
             const settings = await db.collection('settings').doc(interaction.guild.id).get();
             const logChannelId = settings.data()?.vcLogChannel;
@@ -192,15 +233,31 @@ client.on('interactionCreate', async interaction => {
             await logChannel.send({ embeds: [embed] });
             return await safeReply({ content: `ログを ${logChannel} に送信しました。`, flags: MessageFlags.Ephemeral });
         }
-        if (commandName === 'set-text-log-channel') {
-            const channel = options.getChannel('channel');
-            await db.collection('settings').doc(interaction.guild.id).set({ textLogChannel: channel.id }, { merge: true });
-            return await safeReply({ content: `テキストログ送信先を ${channel} に設定しました。`, flags: MessageFlags.Ephemeral });
-        }
         if (commandName === 'register-text-log') {
             await db.collection('text_logs_config').doc(interaction.channel.id).set({ registeredAt: new Date() });
             return await safeReply({ content: `このチャンネルをログ監視対象に登録しました。`, flags: MessageFlags.Ephemeral });
         }
+        if (commandName === 'set-vc-log') {
+        const vc = options.getChannel('vc');
+        const log = options.getChannel('log');
+        await db.collection('vc_log_settings').doc(vc.id).set({ logChannelId: log.id });
+        await interaction.reply({ content: `${vc.name} のログを ${log} に設定しました。`, flags: MessageFlags.Ephemeral });
+    }
+    if (commandName === 'unset-vc-log') {
+        const vc = options.getChannel('vc');
+        await db.collection('vc_log_settings').doc(vc.id).delete();
+        await interaction.reply({ content: `${vc.name} のログ監視を解除しました。`, flags: MessageFlags.Ephemeral });
+    }
+    if (commandName === 'set-text-log') {
+        const ch = options.getChannel('channel');
+        await db.collection('text_log_settings').doc(ch.id).set({ active: true });
+        await interaction.reply({ content: `${ch} をログ監視対象にしました。`, flags: MessageFlags.Ephemeral });
+    }
+    if (commandName === 'unset-text-log') {
+        const ch = options.getChannel('channel');
+        await db.collection('text_log_settings').doc(ch.id).delete();
+        await interaction.reply({ content: `${ch} のログ監視を解除しました。`, flags: MessageFlags.Ephemeral });
+    }
     } else if (interaction.isModalSubmit() && interaction.customId === 'notice_modal') {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const embed = new EmbedBuilder().setTitle(`📢 ${interaction.fields.getTextInputValue('title')}`).setDescription(`${interaction.fields.getTextInputValue('content')}\n\n${interaction.fields.getTextInputValue('url') ? `🔗 [詳細はこちら](${interaction.fields.getTextInputValue('url')})` : ''}`).setFooter({ text: `発信者: ${interaction.fields.getTextInputValue('sender')}` }).setColor(0x00FF00);
