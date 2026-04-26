@@ -105,11 +105,6 @@ client.once('ready', async () => {
     }, 15000);
 });
 
-client.once('ready', async () => {
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-});
-
 const app = express();
 app.get('/', (req, res) => res.send('Bot is Active!'));
 app.listen(3000);
