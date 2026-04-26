@@ -29,26 +29,20 @@ const commands = [
     .addStringOption(o => o.setName('title').setDescription('パネルタイトル'))
     .addStringOption(o => o.setName('description').setDescription('説明文'))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
-    
     new SlashCommandBuilder().setName('ticket').setDescription('チケットパネルを作成')
     .addRoleOption(o => o.setName('admin-role').setDescription('対応管理ロール').setRequired(true))
     .addStringOption(o => o.setName('title').setDescription('タイトル'))
     .addStringOption(o => o.setName('description').setDescription('説明文'))
     .addStringOption(o => o.setName('panel-desc').setDescription('チケット作成時メッセージ'))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
-    
     new SlashCommandBuilder().setName('role-confirmation').setDescription('指定ユーザーのロールを確認')
     .addUserOption(o => o.setName('target').setDescription('確認対象').setRequired(true))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
-    
     new SlashCommandBuilder().setName('delete').setDescription('メッセージを一括削除')
     .addIntegerOption(o => o.setName('amount').setDescription('件数(1-100)').setRequired(true))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
-    
     new SlashCommandBuilder().setName('help').setDescription('コマンド一覧と詳細を表示'),
-    
-    // give-role コマンドの定義
-　　new SlashCommandBuilder().setName('give-role').setDescription('複数のユーザーにロールを付与')
+    new SlashCommandBuilder().setName('give-role').setDescription('複数のユーザーにロールを付与')
     .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
     .addUserOption(o => o.setName('target1').setDescription('対象1').setRequired(true))
     .addUserOption(o => o.setName('target2').setDescription('対象2'))
@@ -56,37 +50,31 @@ const commands = [
     .addUserOption(o => o.setName('target4').setDescription('対象4'))
     .addUserOption(o => o.setName('target5').setDescription('対象5'))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
-　　new SlashCommandBuilder().setName('give-role').setDescription('複数のユーザーにロールを付与')
-    .addRoleOption(o => o.setName('role').setDescription('付与するロール').setRequired(true))
+    new SlashCommandBuilder().setName('remove-role').setDescription('複数のユーザーからロールを剥奪')
+    .addRoleOption(o => o.setName('role').setDescription('剥奪するロール').setRequired(true))
     .addUserOption(o => o.setName('target1').setDescription('対象1').setRequired(true))
     .addUserOption(o => o.setName('target2').setDescription('対象2'))
     .addUserOption(o => o.setName('target3').setDescription('対象3'))
     .addUserOption(o => o.setName('target4').setDescription('対象4'))
     .addUserOption(o => o.setName('target5').setDescription('対象5'))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
-
     new SlashCommandBuilder().setName('receive-notifications').setDescription('重要なお知らせの通知登録を行う'),
-    
     new SlashCommandBuilder().setName('notice').setDescription('お知らせを送信(管理者専用)')
     .addStringOption(o => o.setName('password').setDescription('認証パスワード').setRequired(true))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles),
-
     new SlashCommandBuilder().setName('set-vc-log-channel').setDescription('VCログの送信先チャンネルを設定')
     .addChannelOption(o => o.setName('channel').setDescription('ログを送るチャンネル').addChannelTypes(ChannelType.GuildText).setRequired(true))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
-
-　　new SlashCommandBuilder().setName('record-vc-log').setDescription('現在のVCログを記録し送信')
+    new SlashCommandBuilder().setName('record-vc-log').setDescription('現在のVCログを記録し送信')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
-
     new SlashCommandBuilder().setName('set-text-log-channel').setDescription('テキストログの送信先を設定')
     .addChannelOption(o => o.setName('channel').setDescription('送信先').addChannelTypes(ChannelType.GuildText).setRequired(true))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
-
-　　new SlashCommandBuilder().setName('register-text-log').setDescription('現在のチャンネルをログ監視対象にする')
+    new SlashCommandBuilder().setName('register-text-log').setDescription('現在のチャンネルをログ監視対象にする')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels),
 ].map(c => c.toJSON());
 
-client.once('clientReady', async () => {
+client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
     setInterval(() => {
@@ -97,10 +85,6 @@ client.once('clientReady', async () => {
 const app = express();
 app.get('/', (req, res) => res.send('Bot is Active!'));
 app.listen(3000);
-
-client.on('interactionCreate', async interaction => {
-    if (interaction.replied || interaction.deferred) return;
-    const safeReply = async (data) => { if (!interaction.replied && !interaction.deferred) return await interaction.reply(data); };
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
@@ -121,7 +105,6 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.isChatInputCommand()) {
         const { commandName, options } = interaction;
-
         if (commandName === 'receive-notifications') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             await db.collection('subscribers').doc(interaction.user.id).set({ registeredAt: new Date() });
@@ -136,19 +119,15 @@ client.on('interactionCreate', async interaction => {
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('content').setLabel('内容').setStyle(TextInputStyle.Paragraph).setRequired(true)),
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('url').setLabel('URL（任意）').setStyle(TextInputStyle.Short).setRequired(false))
             );
-            try { await interaction.showModal(modal); } catch (e) { console.error(e); }
+            return await interaction.showModal(modal);
         }
         if (commandName === 'help') {
             const embed = new EmbedBuilder().setTitle('📜 コマンド一覧').setDescription('詳細を確認したいコマンドを選択してください。').setColor(0x00AE86);
             const select = new StringSelectMenuBuilder().setCustomId('help_select').setPlaceholder('コマンドを選択...').addOptions([
-                { label: '/verify', value: 'help_verify' },
-                { label: '/ticket', value: 'help_ticket' },
-                { label: '/role-confirmation', value: 'help_role' },
-                { label: '/delete', value: 'help_delete' },
-                { label: '/give-role', value: 'help_giverole' },
-                { label: '/remove-role', value: 'help_removerole' },
-                { label: '/notice', value: 'help_notice' },
-                { label: '/receive-notifications', value: 'help_notify' }
+                { label: '/verify', value: 'help_verify' }, { label: '/ticket', value: 'help_ticket' },
+                { label: '/role-confirmation', value: 'help_role' }, { label: '/delete', value: 'help_delete' },
+                { label: '/give-role', value: 'help_giverole' }, { label: '/remove-role', value: 'help_removerole' },
+                { label: '/notice', value: 'help_notice' }, { label: '/receive-notifications', value: 'help_notify' }
             ]);
             return await safeReply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(select)], flags: MessageFlags.Ephemeral });
         }
