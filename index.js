@@ -181,58 +181,38 @@ client.on('interactionCreate', async interaction => {
             const role = options.getRole('role');
             const targets = ['target1', 'target2', 'target3', 'target4', 'target5'];
             let count = 0;
-
             for (const t of targets) {
                 const user = options.getUser(t);
                 if (user) {
                     try {
                         const member = await interaction.guild.members.fetch(user.id);
-                        if (commandName === 'give-role') {
-                            await member.roles.add(role);
-                        } else {
-                            await member.roles.remove(role);
-                        }
+                        if (commandName === 'give-role') await member.roles.add(role);
+                        else await member.roles.remove(role);
                         count++;
-                    } catch (err) {
-                        console.error(`処理失敗: ${user.tag}`, err);
-                    }
+                    } catch (err) { console.error(`処理失敗: ${user.tag}`, err); }
                 }
             }
             return await safeReply({ content: `${count} 名に対してロールの${commandName === 'give-role' ? '付与' : '剥奪'}が完了しました。`, flags: MessageFlags.Ephemeral });
         }
         if (commandName === 'set-vc-log-channel') {
-        const channel = options.getChannel('channel');
-        await db.collection('settings').doc(interaction.guild.id).set({ vcLogChannel: channel.id }, { merge: true });
-        return await safeReply({ content: `ログ送信先を ${channel} に設定しました。`, flags: MessageFlags.Ephemeral });
+            const channel = options.getChannel('channel');
+            await db.collection('settings').doc(interaction.guild.id).set({ vcLogChannel: channel.id }, { merge: true });
+            return await safeReply({ content: `ログ送信先を ${channel} に設定しました。`, flags: MessageFlags.Ephemeral });
         }
         if (commandName === 'record-vc-log') {
-    // 1. 設定チャンネルの取得
-        const settings = await db.collection('settings').doc(interaction.guild.id).get();
-        const logChannelId = settings.data()?.vcLogChannel;
-        if (!logChannelId) return await safeReply({ content: '先に /set-vc-log-channel でチャンネルを設定してください。', flags: MessageFlags.Ephemeral });
-        const logChannel = await interaction.guild.channels.fetch(logChannelId);
-
-    // 2. VC情報の取得（コマンド実行者が参加しているVC、またはVC内の情報を検索）
-    // ※今回は「コマンド実行者がVCにいること」を条件とする実装例です
-        const member = await interaction.guild.members.fetch(interaction.user.id);
-        const vc = member.voice.channel;
-        if (!vc) return await safeReply({ content: 'ボイスチャンネルに参加してください。', flags: MessageFlags.Ephemeral });
-
-        const members = vc.members.map(m => m.displayName).join(', ');
-        const date = new Date().toLocaleString('ja-JP');
-
-    // 3. 即時送信
-        const embed = new EmbedBuilder()
-        .setTitle('🎙️ ボイスチャット参加ログ')
-        .addFields(
-            { name: '日時', value: date },
-            { name: '場所', value: vc.name },
-            { name: '参加メンバー', value: members || 'なし' }
-        ).setColor(0x00FF00);
-    
-        await logChannel.send({ embeds: [embed] });
-        return await safeReply({ content: `ログを ${logChannel} に送信しました。`, flags: MessageFlags.Ephemeral });
-　　　　 }
+            const settings = await db.collection('settings').doc(interaction.guild.id).get();
+            const logChannelId = settings.data()?.vcLogChannel;
+            if (!logChannelId) return await safeReply({ content: '先に /set-vc-log-channel でチャンネルを設定してください。', flags: MessageFlags.Ephemeral });
+            const logChannel = await interaction.guild.channels.fetch(logChannelId);
+            const member = await interaction.guild.members.fetch(interaction.user.id);
+            const vc = member.voice.channel;
+            if (!vc) return await safeReply({ content: 'ボイスチャンネルに参加してください。', flags: MessageFlags.Ephemeral });
+            const members = vc.members.map(m => m.displayName).join(', ');
+            const date = new Date().toLocaleString('ja-JP');
+            const embed = new EmbedBuilder().setTitle('🎙️ ボイスチャット参加ログ').addFields({ name: '日時', value: date }, { name: '場所', value: vc.name }, { name: '参加メンバー', value: members || 'なし' }).setColor(0x00FF00);
+            await logChannel.send({ embeds: [embed] });
+            return await safeReply({ content: `ログを ${logChannel} に送信しました。`, flags: MessageFlags.Ephemeral });
+        }
         if (commandName === 'set-text-log-channel') {
             const channel = options.getChannel('channel');
             await db.collection('settings').doc(interaction.guild.id).set({ textLogChannel: channel.id }, { merge: true });
@@ -242,18 +222,14 @@ client.on('interactionCreate', async interaction => {
             await db.collection('text_logs_config').doc(interaction.channel.id).set({ registeredAt: new Date() });
             return await safeReply({ content: `このチャンネルをログ監視対象に登録しました。`, flags: MessageFlags.Ephemeral });
         }
-}
-
-    if (interaction.isModalSubmit() && interaction.customId === 'notice_modal') {
+    } else if (interaction.isModalSubmit() && interaction.customId === 'notice_modal') {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const embed = new EmbedBuilder().setTitle(`📢 ${interaction.fields.getTextInputValue('title')}`).setDescription(`${interaction.fields.getTextInputValue('content')}\n\n${interaction.fields.getTextInputValue('url') ? `🔗 [詳細はこちら](${interaction.fields.getTextInputValue('url')})` : ''}`).setFooter({ text: `発信者: ${interaction.fields.getTextInputValue('sender')}` }).setColor(0x00FF00);
         const subs = await db.collection('subscribers').get();
         let count = 0;
         for (const doc of subs.docs) { try { const user = await client.users.fetch(doc.id); await user.send({ embeds: [embed] }); count++; } catch (e) { } }
         return await interaction.editReply(`${count} 名に送信しました。`);
-    }
-
-    if (interaction.isButton() || interaction.isStringSelectMenu()) {
+    } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
         const { customId } = interaction;
         if (customId.startsWith('bulk_delete_yes_')) {
             await interaction.channel.bulkDelete(parseInt(customId.split('_')[3]), true);
@@ -264,63 +240,32 @@ client.on('interactionCreate', async interaction => {
             await interaction.member.roles.add(customId.split('_')[2]);
             return await safeReply({ content: 'ロールを付与しました！', flags: MessageFlags.Ephemeral });
         }
-      　 if (customId.startsWith('tkt_')) {
+        if (customId.startsWith('tkt_')) {
             const [_, adminId, key] = customId.split('_');
-            
-            // ★ここを修正：メッセージがない場合はデフォルト文を指定する
             const customMessage = ticketMessages.get(key) || 'お問い合わせありがとうございます。\n担当者が来るまで少々お待ちください。';
-            
-            const ch = await interaction.guild.channels.create({ 
-                name: `🎫-${interaction.user.username}`, 
-                type: ChannelType.GuildText 
-            });
-
-            // チャンネル内にメッセージを送信
-            await ch.send({ 
-                content: `${interaction.user} ${customMessage} <@&${adminId}>`, 
-                components: [
-                    new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('t_close_c').setLabel('閉じる').setStyle(ButtonStyle.Danger)
-                    )
-                ] 
-            });
-
-            return await safeReply({ 
-                content: `チケットを作成しました: ${ch}`, 
-                flags: MessageFlags.Ephemeral 
-            });
+            const ch = await interaction.guild.channels.create({ name: `🎫-${interaction.user.username}`, type: ChannelType.GuildText });
+            await ch.send({ content: `${interaction.user} ${customMessage} <@&${adminId}>`, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('t_close_c').setLabel('閉じる').setStyle(ButtonStyle.Danger))] });
+            return await safeReply({ content: `チケットを作成しました: ${ch}`, flags: MessageFlags.Ephemeral });
         }
         if (customId === 't_close_c') {
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('t_yes').setLabel('削除').setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('t_no').setLabel('キャンセル').setStyle(ButtonStyle.Secondary)
-            );
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('t_yes').setLabel('削除').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId('t_no').setLabel('キャンセル').setStyle(ButtonStyle.Secondary));
             return await interaction.reply({ content: '本当にチケットを削除しますか？', components: [row], flags: MessageFlags.Ephemeral });
         }
-
-        // 削除確認で「キャンセル」が押された場合
-        if (customId === 't_no') {
-            return await interaction.update({ content: '削除をキャンセルしました。', components: [] });
-        }
+        if (customId === 't_no') return await interaction.update({ content: '削除をキャンセルしました。', components: [] });
         if (customId === 't_yes') await interaction.channel.delete();
         if (customId === 'help_select') {
             const helpData = {
-                help_verify: { title: '/verify', desc: '【内容】認証パネルを作成します。\n【詳細】ボタンを押したユーザーに指定したロールを付与します。\n(このコマンドは管理者専用です。)' },
-                help_ticket: { title: '/ticket', desc: '【内容】チケットパネルを作成します。\n【詳細】問い合わせチャンネルを生成し、管理者へ通知します。\n(このコマンドは管理者専用です。)' },
-                help_role: { title: '/role-confirmation', desc: '【内容】ロール確認\n【詳細】指定した対象の現在のロール一覧を表示します。\n(このコマンドは管理者専用です。)' },
-                help_delete: { title: '/delete', desc: '【内容】メッセージ一括削除\n【詳細】指定した件数(1-100)のメッセージを削除します。\n(このコマンドは管理者専用です。)' },
-                help_giverole: { title: '/give-role', desc: '【内容】ロール付与\n【詳細】指定したユーザーに特定のロールを付与します。\n(このコマンドは管理者専用です。)' },
-                help_removerole: { title: '/remove-role', desc: '【内容】ロール剥奪\n【詳細】指定したユーザーから特定のロールを剥奪します。\n(このコマンドは管理者専用です。)' },
-                help_notice: { title: '/notice', desc: '【内容】お知らせ送信\n【詳細】パスワード認証後、通知登録者全員に一斉DMを送信します。\n(このコマンドは管理者専用です。)' },
+                help_verify: { title: '/verify', desc: '【内容】認証パネルを作成します。\n【詳細】ボタンを押したユーザーに指定したロールを付与します。' },
+                help_ticket: { title: '/ticket', desc: '【内容】チケットパネルを作成します。\n【詳細】問い合わせチャンネルを生成し、管理者へ通知します。' },
+                help_role: { title: '/role-confirmation', desc: '【内容】ロール確認\n【詳細】指定した対象の現在のロール一覧を表示します。' },
+                help_delete: { title: '/delete', desc: '【内容】メッセージ一括削除\n【詳細】指定した件数(1-100)のメッセージを削除します。' },
+                help_giverole: { title: '/give-role', desc: '【内容】ロール付与\n【詳細】指定したユーザーに特定のロールを付与します。' },
+                help_removerole: { title: '/remove-role', desc: '【内容】ロール剥奪\n【詳細】指定したユーザーから特定のロールを剥奪します。' },
+                help_notice: { title: '/notice', desc: '【内容】お知らせ送信\n【詳細】パスワード認証後、通知登録者全員に一斉DMを送信します。' },
                 help_notify: { title: '/receive-notifications', desc: '【内容】通知登録\n【詳細】お知らせを受け取るためのリストに自身を登録します。' }
             };
-            
-            const selected = interaction.values[0];
-            const data = helpData[selected];
-            await interaction.update({ 
-                embeds: [new EmbedBuilder().setTitle(`📖 ${data.title}`).setDescription(data.desc).setColor(0x00AE86)], 
-                components: [interaction.message.components[0]] 
-            });
+            const data = helpData[interaction.values[0]];
+            await interaction.update({ embeds: [new EmbedBuilder().setTitle(`📖 ${data.title}`).setDescription(data.desc).setColor(0x00AE86)], components: [interaction.message.components[0]] });
         }
     }
 });
